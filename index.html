@@ -15,7 +15,7 @@
 /* Layout: one screen. Header and found strip on top, the equation bar in the middle, the tile tray at the bottom.
    Opposite operators share a color: + and - are teal, x and / are orange. Deliberately single (light) theme. */
 :root {
-  --sky: #DCEBF7;
+  --sky: #FCE4EC;
   --ink: #1E2B4A;
   --muted: #5D6E8C;
   --tile: #FFFFFF;
@@ -109,7 +109,7 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
 
 /* Slots and pieces. Every tile, in the tray or in the equation, and every empty box is one size: --t. */
 .slot { display: inline-flex; align-items: center; justify-content: center; border-radius: var(--t-radius); flex: none; }
-.slot.empty { width: var(--t); height: var(--t); border: 3px dashed var(--edge); background: rgba(220, 235, 247, 0.5); }
+.slot.empty { width: var(--t); height: var(--t); border: 3px dashed var(--edge); background: rgba(252, 228, 236, 0.5); }
 .slot.lhs.empty { border-color: var(--go); background: var(--go-tint); }
 .slot.over.empty { border-style: solid; border-color: var(--go); background: var(--go-tint); }
 .slot.over.filled { outline: 4px solid var(--go); outline-offset: 3px; }
