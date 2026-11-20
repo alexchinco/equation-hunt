@@ -655,6 +655,9 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
   window.__eqhunt = { evaluate: evaluate, text: text, fmt: fmt, N: N, O: O };
 
   newRound();
+
+  // Save the game on the device so it also works without internet.
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});
 })();
 </script>
 </body>
