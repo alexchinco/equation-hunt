@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Equation Hunt">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Equation Hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&display=swap">
+<style>
+/* Layout: one screen. Header and found strip on top, the equation bar in the middle, the tile tray at the bottom.
+   Opposite operators share a color: + and - are teal, x and / are orange. Deliberately single (light) theme. */
+:root {
+  --sky: #DCEBF7;
+  --ink: #1E2B4A;
+  --muted: #5D6E8C;
+  --tile: #FFFFFF;
+  --edge: #A9BFD9;
+  --add: #14A38B;
+  --add-edge: #0B7563;
+  --add-tint: #D3F1EA;
+  --mul: #EF7D22;
+  --mul-edge: #B85A10;
+  --mul-tint: #FDE5D0;
+  --go: #3B5BDB;
+  --go-edge: #2A42A6;
+  --go-tint: #E3E9FF;
+  --good: #1F9D55;
+  --bad: #D6453D;
+  --shade: rgba(30, 43, 74, 0.45);
+  --display: "Fredoka", "Avenir Next Rounded", "Arial Rounded MT Bold", system-ui, sans-serif;
+  --body: "Nunito", "Avenir Next", system-ui, sans-serif;
+  --t: clamp(48px, 8.5vh, 84px);
+  --t-font: clamp(26px, 4.7vh, 46px);
+  --t-radius: clamp(10px, 1.8vh, 18px);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--sky);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 17px;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
+
+#app {
+  height: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* Header */
+.bar { display: flex; align-items: center; gap: 18px; }
+.brand { font-family: var(--display); font-weight: 700; font-size: 26px; margin-right: auto; }
+.stat { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.stat .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 800; }
+.stat .val { font-family: var(--display); font-weight: 600; font-size: 30px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.timebar { height: 10px; border-radius: 6px; background: rgba(169, 191, 217, 0.5); overflow: hidden; flex: none; }
+#timefill { height: 100%; width: 100%; background: var(--add); border-radius: 6px; transition: width 1s linear, background 0.3s; }
+#timefill.low { background: var(--mul); }
+
+/* Found strip */
+.found { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.found .lbl { font-family: var(--display); font-weight: 600; font-size: 18px; white-space: nowrap; }
+.found .lbl span { color: var(--muted); }
+.list { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; }
+#foundList { flex: 1; min-width: 0; overflow-x: auto; flex-wrap: nowrap; }
+.list li {
+  background: var(--tile); border-radius: 12px; padding: 5px 12px;
+  font-family: var(--display); font-weight: 500; font-size: 18px; white-space: nowrap;
+}
+.list li.new { animation: yay 0.45s; }
+.list .empty { background: none; font-family: var(--body); color: var(--muted); font-size: 16px; padding-left: 0; }
+
+/* Stage with the equation bar */
+.stage { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+#eqbar {
+  padding: 18px 20px; min-height: 130px;
+  display: flex; align-items: center; justify-content: safe center;
+  overflow-x: auto;
+}
+.eqrow { display: flex; align-items: center; gap: 10px; }
+.equals { font-family: var(--display); font-weight: 700; font-size: var(--t-font); color: var(--go); padding: 0 4px; }
+#eqbar.yay { animation: yay 0.45s; }
+.msg { min-height: 26px; font-size: 19px; font-weight: 800; color: var(--muted); text-align: center; }
+.msg.good { color: var(--good); }
+.msg.bad { color: var(--bad); }
+
+/* Slots and pieces. Every tile, in the tray or in the equation, and every empty box is one size: --t. */
+.slot { display: inline-flex; align-items: center; justify-content: center; border-radius: var(--t-radius); flex: none; }
+.slot.empty { width: var(--t); height: var(--t); border: 3px dashed var(--edge); background: rgba(220, 235, 247, 0.5); }
+.slot.lhs.empty { border-color: var(--go); background: var(--go-tint); }
+.slot.over.empty { border-style: solid; border-color: var(--go); background: var(--go-tint); }
+.slot.over.filled { outline: 4px solid var(--go); outline-offset: 3px; }
+.piece { touch-action: none; cursor: grab; }
+.chip, .opsym, .ttile {
+  min-width: var(--t); height: var(--t); padding: 0 6px; border-radius: var(--t-radius);
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  background: var(--tile); box-shadow: 0 2px 4px rgba(30, 43, 74, 0.18);
+  font-family: var(--display); font-weight: 600; font-size: var(--t-font);
+  font-variant-numeric: tabular-nums;
+}
+.opsym, .ttile.add { background: var(--add); color: #fff; }
+.node.mul > .opsym, .ttile.mul { background: var(--mul); color: #fff; }
+.node {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px; border-radius: calc(var(--t-radius) + 6px);
+  border: 3px solid var(--add); background: var(--add-tint);
+}
+.node.mul { border-color: var(--mul); background: var(--mul-tint); }
+.dragghost {
+  position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none;
+  filter: drop-shadow(0 8px 10px rgba(30, 43, 74, 0.3));
+}
+
+/* Tray */
+.tray { flex: none; display: flex; flex-direction: column; align-items: center; gap: 12px; padding-bottom: 6px; }
+.nums, .opgroup { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.ops { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; }
+.nums { max-width: calc(6 * var(--t) + 50px); }
+.ttile { touch-action: none; cursor: grab; }
+.ttile.used { visibility: hidden; }
+.tray.off .ttile { cursor: default; }
+
+/* Overlays */
+.overlay {
+  position: fixed; inset: 0; background: var(--shade);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
+  z-index: 20;
+}
+.card {
+  background: var(--tile); border-radius: 28px; width: 100%; max-width: 580px;
+  max-height: 100%; overflow-y: auto;
+  padding: 28px; display: flex; flex-direction: column; gap: 16px;
+  box-shadow: 0 10px 0 var(--edge);
+}
+.card h1, .card h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 40px; text-wrap: balance; }
+.card p { margin: 0; line-height: 1.45; font-size: 18px; max-width: 60ch; }
+.example { --t: 44px; --t-font: 24px; --t-radius: 10px; display: flex; justify-content: center; overflow-x: auto; padding: 4px 0; }
+.setting { display: flex; flex-direction: column; gap: 8px; }
+.setting .lbl { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 800; }
+.seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.seg button {
+  border: 2px solid var(--edge); background: var(--tile); border-radius: 14px;
+  padding: 10px 16px; font-weight: 800; font-size: 17px;
+}
+.seg button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.big {
+  height: 72px; border: none; border-radius: 20px; background: var(--go); color: #fff;
+  box-shadow: 0 6px 0 var(--go-edge); font-family: var(--display); font-weight: 700; font-size: 32px;
+}
+.big:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--go-edge); }
+.row { display: flex; gap: 12px; flex-wrap: wrap; }
+.row > * { flex: 1; min-width: 180px; }
+.secondary {
+  height: 72px; border: 2px solid var(--edge); border-radius: 20px; background: var(--tile);
+  font-family: var(--display); font-weight: 600; font-size: 24px;
+}
+.result { display: flex; gap: 28px; align-items: baseline; flex-wrap: wrap; }
+.result .num { font-family: var(--display); font-weight: 700; font-size: 64px; line-height: 1; }
+.result .count-num { color: var(--add); }
+.result .sub { font-size: 18px; font-weight: 800; color: var(--muted); }
+#endList { flex-wrap: wrap; max-height: 34vh; overflow-y: auto; }
+#endList li { background: var(--sky); }
+
+@keyframes yay { 0% { transform: scale(1); } 40% { transform: scale(1.04); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  #eqbar.yay, .list li.new { animation: none; }
+  #timefill { transition: none; }
+}
+
+@media (max-width: 620px) {
+  .brand { font-size: 20px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <div class="brand">Equation Hunt</div>
+    <div class="stat" id="timeStat"><span class="lbl">Time</span><span class="val" id="time">60</span></div>
+  </header>
+  <div class="timebar" id="timebar"><div id="timefill"></div></div>
+
+  <section class="found">
+    <div class="lbl">Found <span id="foundCount">0</span></div>
+    <ul class="list" id="foundList"></ul>
+  </section>
+
+  <section class="stage">
+    <div id="eqbar" aria-live="polite"></div>
+    <div class="msg" id="msg"></div>
+  </section>
+
+  <section class="tray" id="tray">
+    <div class="nums" id="nums"></div>
+    <div class="ops" id="ops"></div>
+  </section>
+</div>
+
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <h1>Equation Hunt</h1>
+    <p>Drag a number into the box on the left. Then make that number on the right by dragging tiles into the boxes. Every sign brings two new boxes of its own.</p>
+    <div class="example" id="example"></div>
+    <p>A correct equation counts as soon as you make it. Each equation counts only once, so look for bigger ones too. Each tile can be used once per equation. Drag a tile back down to take it out.</p>
+    <div class="setting">
+      <span class="lbl">Numbers</span>
+      <div class="seg" id="maxSeg">
+        <button type="button" id="max10" data-max="10" aria-pressed="true">Up to 10</button>
+        <button type="button" id="max20" data-max="20" aria-pressed="false">Up to 20</button>
+      </div>
+    </div>
+    <div class="setting">
+      <span class="lbl">Time</span>
+      <div class="seg" id="timeSeg">
+        <button type="button" id="t60" data-time="60" aria-pressed="true">1 minute</button>
+        <button type="button" id="t120" data-time="120" aria-pressed="false">2 minutes</button>
+      </div>
+    </div>
+    <button class="big" id="playBtn" type="button">Play</button>
+  </div>
+</div>
+
+<div class="overlay" id="endScreen" hidden>
+  <div class="card">
+    <h2 id="endTitle">Time's up!</h2>
+    <div class="result">
+      <div><div class="num count-num" id="endCount">0</div><div class="sub">equations</div></div>
+    </div>
+    <p id="endBest"></p>
+    <ul class="list" id="endList"></ul>
+    <div class="row">
+      <button class="big" id="againBtn" type="button">Play again</button>
+      <button class="secondary" id="settingsBtn" type="button">Settings</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var SYM = { "+": "+", "-": "−", "*": "×", "/": "÷" };
+  var FAM = { "+": "add", "-": "add", "*": "mul", "/": "mul" };
+  var NAME = { "+": "plus", "-": "minus", "*": "times", "/": "divided by" };
+  var OPS = ["+", "+", "-", "-", "*", "*", "/", "/"];
+
+  var settings = { max: 10, time: 60 };
+  var S = null;     // round state
+  var drag = null;  // piece in hand
+
+  function rand(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  // 12 positive integers: two adding families (a, b, a+b), one times family (a, b, a*b),
+  // plus three extra copies of small numbers so "do it, then undo it" moves are possible.
+  function makeNumbers(max) {
+    var nums = [];
+    for (var k = 0; k < 2; k++) {
+      var c = rand(3, max), a = rand(1, c - 1);
+      nums.push(a, c - a, c);
+    }
+    var pairs = [];
+    for (var x = 2; x * x <= max; x++) for (var y = x; x * y <= max; y++) pairs.push([x, y]);
+    var p = pairs[rand(0, pairs.length - 1)];
+    nums.push(p[0], p[1], p[0] * p[1]);
+    var small = nums.slice().sort(function (m, n) { return m - n; }).slice(0, 6);
+    for (var d = 0; d < 3; d++) nums.push(small[rand(0, small.length - 1)]);
+    return shuffle(nums);
+  }
+
+  // Exact fractions [numerator, denominator], denominator > 0, always reduced.
+  function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = a % b; a = b; b = t; } return a; }
+  function frac(n, d) { if (d < 0) { n = -n; d = -d; } var g = gcd(n, d) || 1; return [n / g, d / g]; }
+  function fmt(v) {
+    var n = v[0] < 0 ? "−" + Math.abs(v[0]) : String(v[0]);
+    return v[1] === 1 ? n : n + "/" + v[1];
+  }
+
+  // Expression trees. Number: {k:"n", i, v}. Sign: {k:"o", i, op, a, b} where a and b are the two boxes.
+  function evaluate(node) {
+    if (node.k === "n") return [node.v, 1];
+    var x = evaluate(node.a), y = evaluate(node.b);
+    if (node.op === "+") return frac(x[0] * y[1] + y[0] * x[1], x[1] * y[1]);
+    if (node.op === "-") return frac(x[0] * y[1] - y[0] * x[1], x[1] * y[1]);
+    if (node.op === "*") return frac(x[0] * y[0], x[1] * y[1]);
+    if (y[0] === 0) throw new Error("zero");
+    return frac(x[0] * y[1], x[1] * y[0]);
+  }
+  // Every group inside a sign's box gets parentheses, matching the boxes on screen.
+  function text(node) {
+    if (node.k === "n") return String(node.v);
+    function side(c) { return c.k === "o" ? "(" + text(c) + ")" : text(c); }
+    return side(node.a) + " " + SYM[node.op] + " " + side(node.b);
+  }
+  function complete(node) { return node.k === "n" || (!!node.a && !!node.b && complete(node.a) && complete(node.b)); }
+  function collect(node, usedN, usedO) {
+    if (!node) return;
+    if (node.k === "n") { usedN[node.i] = 1; return; }
+    usedO[node.i] = 1;
+    collect(node.a, usedN, usedO);
+    collect(node.b, usedN, usedO);
+  }
+
+  // Box addresses: "L" is the left side, "R" the right side, "R.a.b" = right box of the left box of R.
+  function getAt(path) {
+    var parts = path.split(".");
+    var node = parts[0] === "L" ? S.lhs : S.rhs;
+    for (var j = 1; j < parts.length && node; j++) node = node[parts[j]];
+    return node || null;
+  }
+  function setAt(path, val) {
+    var parts = path.split(".");
+    if (parts.length === 1) { if (parts[0] === "L") S.lhs = val; else S.rhs = val; return; }
+    getAt(parts.slice(0, -1).join("."))[parts[parts.length - 1]] = val;
+  }
+  // Can the piece in hand go in this box? An empty box takes it. A full box takes a sign
+  // that still has an empty box: what was there moves into the sign.
+  function placeProblem(path, hand) {
+    var cur = getAt(path);
+    if (path === "L") {
+      if (hand.k !== "n") return "Only one number goes on the left.";
+      return cur ? "That box is full." : "";
+    }
+    if (!cur) return "";
+    if (hand.k === "o" && (!hand.a || !hand.b)) return "";
+    return "That box is full. Find an empty one.";
+  }
+  function place(path, hand) {
+    var cur = getAt(path);
+    if (cur) { if (!hand.a) hand.a = cur; else hand.b = cur; }
+    setAt(path, hand);
+  }
+
+  // Rendering pieces. path null means a picture only (drag ghost, example).
+  function pieceEl(node, path) {
+    if (node.k === "n") {
+      var c = el("div", "piece chip", node.v);
+      if (path) c.dataset.path = path;
+      return c;
+    }
+    var n = el("div", "piece node " + FAM[node.op]);
+    if (path) n.dataset.path = path;
+    n.appendChild(slotEl(path ? path + ".a" : null, node.a));
+    var s = el("span", "opsym", SYM[node.op]);
+    s.setAttribute("aria-label", NAME[node.op]);
+    n.appendChild(s);
+    n.appendChild(slotEl(path ? path + ".b" : null, node.b));
+    return n;
+  }
+  function slotEl(path, content, extra) {
+    var s = el("div", "slot " + (content ? "filled" : "empty") + (extra ? " " + extra : ""));
+    if (path) s.dataset.path = path;
+    if (content) s.appendChild(pieceEl(content, path));
+    return s;
+  }
+  function equationEl(lhs, rhs, live) {
+    var row = el("div", "eqrow");
+    row.appendChild(slotEl(live ? "L" : null, lhs, "lhs"));
+    row.appendChild(el("span", "equals", "="));
+    row.appendChild(slotEl(live ? "R" : null, rhs));
+    return row;
+  }
+
+  function canCheck() { return !!S.lhs && !!S.rhs && S.rhs.k === "o" && complete(S.rhs); }
+
+  function say(t, kind) {
+    var m = $("msg");
+    m.textContent = t;
+    m.className = "msg" + (kind ? " " + kind : "");
+  }
+  function animate(e, cls) { e.classList.remove(cls); void e.offsetWidth; e.classList.add(cls); }
+
+  function newRound() {
+    S = {
+      nums: makeNumbers(settings.max), ops: OPS.slice(),
+      lhs: null, rhs: null, found: [], keys: {},
+      left: settings.time, running: false, timer: null
+    };
+    say("", "");
+    render();
+  }
+  function startRound() {
+    newRound();
+    S.running = true;
+    $("startScreen").hidden = true;
+    $("endScreen").hidden = true;
+    if (settings.time > 0) S.timer = setInterval(tick, 1000);
+    render();
+    say("", "");
+  }
+  function tick() {
+    S.left--;
+    if (S.left <= 0) { S.left = 0; endRound(); }
+    renderTime();
+  }
+
+  function bestKey() { return "eqhunt-count-best-" + settings.max + "-" + settings.time; }
+  function readBest() { try { return parseInt(localStorage.getItem(bestKey()), 10) || 0; } catch (e) { return 0; } }
+  function writeBest(v) { try { localStorage.setItem(bestKey(), String(v)); } catch (e) {} }
+
+  function endRound() {
+    if (!S.running) return;
+    cancelDrag();
+    S.running = false;
+    clearInterval(S.timer);
+    S.lhs = null; S.rhs = null;
+    render();
+    say("", "");
+    var best = readBest();
+    $("endTitle").textContent = settings.time > 0 ? "Time's up!" : "Nice work!";
+    $("endCount").textContent = S.found.length;
+    var n = S.found.length;
+    if (n > best) {
+      writeBest(n);
+      $("endBest").textContent = best > 0 ? "New best! Your old best was " + best + "." : "That's your first best score!";
+    } else {
+      $("endBest").textContent = best > 0 ? "Best so far: " + best + "." : "";
+    }
+    fillList($("endList"), S.found, false);
+    $("endScreen").hidden = false;
+  }
+
+  // Runs after every change. A finished, correct, new equation is recorded right away and the
+  // bar clears, returning its tiles to the tray. Returns true if it said something.
+  function autoCheck() {
+    if (!S.running || !canCheck()) return false;
+    var lhs = S.lhs.v, rhsText = text(S.rhs), full = lhs + " = " + rhsText, v;
+    try { v = evaluate(S.rhs); }
+    catch (e) { say("You can't divide by 0. Try something else.", "bad"); return true; }
+    if (!(v[0] === lhs && v[1] === 1)) { say(rhsText + " makes " + fmt(v) + ", not " + lhs + ".", ""); return true; }
+    if (S.keys[full]) { say("You already found that one. Keep building!", ""); return true; }
+    S.keys[full] = true;
+    S.found.unshift({ text: full });
+    S.lhs = null; S.rhs = null;
+    render();
+    say("Yes! " + full, "good");
+    animate($("eqbar"), "yay");
+    var first = $("foundList").firstChild;
+    if (first) first.classList.add("new");
+    return true;
+  }
+
+  function fillList(ul, found, live) {
+    ul.innerHTML = "";
+    if (!found.length) {
+      ul.appendChild(el("li", "empty", live ? "Your equations will show up here." : "No equations this time."));
+      return;
+    }
+    found.forEach(function (f) {
+      var li = el("li", "", f.text);
+      ul.appendChild(li);
+    });
+  }
+
+  function renderTime() {
+    var timed = settings.time > 0;
+    $("timeStat").hidden = !timed;
+    $("timebar").hidden = !timed;
+    $("time").textContent = S.left;
+    var fill = $("timefill");
+    fill.style.width = (timed ? (100 * S.left / settings.time) : 100) + "%";
+    fill.classList.toggle("low", S.left <= 10);
+  }
+
+  function render() {
+    var usedN = {}, usedO = {};
+    collect(S.lhs, usedN, usedO);
+    collect(S.rhs, usedN, usedO);
+    if (drag) collect(drag.hand, usedN, usedO);
+
+    $("tray").classList.toggle("off", !S.running);
+    var nums = $("nums");
+    nums.innerHTML = "";
+    S.nums.forEach(function (v, i) {
+      var t = el("div", "ttile" + (usedN[i] ? " used" : ""), v);
+      t.dataset.kind = "n";
+      t.dataset.i = i;
+      nums.appendChild(t);
+    });
+    var ops = $("ops");
+    ops.innerHTML = "";
+    ["add", "mul"].forEach(function (fam) {
+      var g = el("div", "opgroup");
+      S.ops.forEach(function (o, i) {
+        if (FAM[o] !== fam) return;
+        var t = el("div", "ttile " + fam + (usedO[i] ? " used" : ""), SYM[o]);
+        t.dataset.kind = "o";
+        t.dataset.i = i;
+        t.setAttribute("aria-label", NAME[o]);
+        g.appendChild(t);
+      });
+      ops.appendChild(g);
+    });
+
+    var bar = $("eqbar");
+    bar.innerHTML = "";
+    bar.appendChild(equationEl(S.lhs, S.rhs, true));
+
+    $("foundCount").textContent = S.found.length;
+    fillList($("foundList"), S.found, true);
+    renderTime();
+  }
+
+  // Dragging. Works with finger, pen, or mouse through pointer events.
+  // The piece follows the finger from the spot where it was grabbed. A tile from the tray
+  // keeps its exact look while it moves; its boxes appear only once it lands in the equation.
+  function beginDrag(e, hand, origin, srcEl) {
+    e.preventDefault();
+    var r = srcEl.getBoundingClientRect();
+    var ghost = el("div", "dragghost");
+    if (origin) {
+      ghost.appendChild(pieceEl(hand, null));
+    } else {
+      var t = srcEl.cloneNode(true);
+      t.style.width = r.width + "px";
+      t.style.height = r.height + "px";
+      ghost.appendChild(t);
+    }
+    document.body.appendChild(ghost);
+    drag = { hand: hand, origin: origin, ghost: ghost, over: null, id: e.pointerId,
+             ox: e.clientX - r.left, oy: e.clientY - r.top };
+    moveGhost(e.clientX, e.clientY);
+    srcEl.style.visibility = "hidden";
+  }
+  function slotAt(x, y) {
+    var hit = document.elementFromPoint(x, y);
+    return hit ? hit.closest("#eqbar .slot") : null;
+  }
+  function moveGhost(x, y) {
+    drag.ghost.style.transform = "translate(" + (x - drag.ox) + "px," + (y - drag.oy) + "px)";
+    var slot = slotAt(x, y);
+    if (slot && placeProblem(slot.dataset.path, drag.hand)) slot = null;
+    if (drag.over && drag.over !== slot) drag.over.classList.remove("over");
+    if (slot) slot.classList.add("over");
+    drag.over = slot;
+  }
+  function finishDrag(x, y) {
+    var hand = drag.hand, origin = drag.origin;
+    var slot = slotAt(x, y);
+    var hit = document.elementFromPoint(x, y);
+    var onBar = !!(hit && hit.closest("#eqbar"));
+    drag.ghost.remove();
+    drag = null;
+    if (slot && !placeProblem(slot.dataset.path, hand)) { place(slot.dataset.path, hand); hand = null; }
+    // Not placed: a piece taken from the bar goes back where it was if it was dropped on the bar,
+    // and back to the tray if it was dropped anywhere else.
+    if (hand && origin && (onBar || slot)) setAt(origin, hand);
+    render();
+    if (!autoCheck()) say("", "");
+  }
+  function cancelDrag() {
+    if (!drag) return;
+    var hand = drag.hand, origin = drag.origin;
+    drag.ghost.remove();
+    drag = null;
+    if (origin) setAt(origin, hand);
+  }
+
+  $("tray").addEventListener("pointerdown", function (e) {
+    var t = e.target.closest(".ttile");
+    if (!t || drag || !S.running || t.classList.contains("used")) return;
+    var i = +t.dataset.i;
+    var hand = t.dataset.kind === "n"
+      ? { k: "n", i: i, v: S.nums[i] }
+      : { k: "o", i: i, op: S.ops[i], a: null, b: null };
+    beginDrag(e, hand, null, t);
+  });
+  $("eqbar").addEventListener("pointerdown", function (e) {
+    var p = e.target.closest(".piece");
+    if (!p || drag || !S.running) return;
+    var path = p.dataset.path;
+    var hand = getAt(path);
+    setAt(path, null);
+    beginDrag(e, hand, path, p);
+  });
+  document.addEventListener("pointermove", function (e) {
+    if (drag && e.pointerId === drag.id) moveGhost(e.clientX, e.clientY);
+  });
+  document.addEventListener("pointerup", function (e) {
+    if (drag && e.pointerId === drag.id) finishDrag(e.clientX, e.clientY);
+  });
+  document.addEventListener("pointercancel", function (e) {
+    if (drag && e.pointerId === drag.id) { cancelDrag(); render(); }
+  });
+
+
+  function segment(id, key) {
+    $(id).addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (!b) return;
+      settings[key] = +b.dataset[key];
+      Array.prototype.forEach.call($(id).children, function (c) {
+        c.setAttribute("aria-pressed", c === b ? "true" : "false");
+      });
+      try { localStorage.setItem("eqhunt-settings", JSON.stringify(settings)); } catch (err) {}
+    });
+  }
+  segment("maxSeg", "max");
+  segment("timeSeg", "time");
+  try {
+    var saved = JSON.parse(localStorage.getItem("eqhunt-settings") || "null");
+    if (saved && (saved.max === 10 || saved.max === 20) && [60, 120].indexOf(saved.time) >= 0) settings = saved;
+  } catch (err) {}
+  Array.prototype.forEach.call($("maxSeg").children, function (c) { c.setAttribute("aria-pressed", +c.dataset.max === settings.max ? "true" : "false"); });
+  Array.prototype.forEach.call($("timeSeg").children, function (c) { c.setAttribute("aria-pressed", +c.dataset.time === settings.time ? "true" : "false"); });
+
+  $("playBtn").addEventListener("click", startRound);
+  $("againBtn").addEventListener("click", startRound);
+  $("settingsBtn").addEventListener("click", function () {
+    $("endScreen").hidden = true;
+    $("startScreen").hidden = false;
+  });
+
+  // Example on the start screen: 5 = ((3 + 2) x 2) / 2
+  function N(v) { return { k: "n", v: v }; }
+  function O(op, a, b) { return { k: "o", op: op, a: a, b: b }; }
+  $("example").appendChild(equationEl(N(5), O("/", O("*", O("+", N(3), N(2)), N(2)), N(2)), false));
+
+  window.__eqhunt = { evaluate: evaluate, text: text, fmt: fmt, N: N, O: O };
+
+  newRound();
+})();
+</script>
+</body>
+</html>
