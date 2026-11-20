@@ -196,6 +196,22 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
 }
 .ring { width: 140vmax; height: 140vmax; border-radius: 50%;
   background: radial-gradient(circle, transparent 52%, #ff5c8a 53%, #ff5c8a 56%, #ffa53a 57%, #ffa53a 60%, #ffe14d 61%, #ffe14d 64%, #5ad17a 65%, #5ad17a 68%, #4fb3ff 69%, #4fb3ff 72%, #9b6bff 73%, #9b6bff 76%, transparent 77%); }
+.beam { transform-origin: 50% 100%; border-radius: 12px 12px 0 0;
+  background: linear-gradient(to right, #ff5c8a 0 16.6%, #ffa53a 0 33.3%, #ffe14d 0 50%, #5ad17a 0 66.6%, #4fb3ff 0 83.3%, #9b6bff 0); }
+.shard { transform-origin: 50% 100%; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.night { width: 100vw; height: 100vh; background: #120a2a; left: 0; top: 0; }
+.glow { text-shadow: 0 0 20px #fff, 0 0 40px #ff5cf0, 0 0 70px #4fb3ff; }
+.streak { width: 5px; border-radius: 3px; transform-origin: 50% 100%; }
+.puff { border-radius: 50%; filter: blur(6px); }
+.arch { border-radius: 9999px 9999px 0 0; background: radial-gradient(ellipse 50% 100% at 50% 100%, transparent 55%, #9b6bff 55% 61%, #4fb3ff 61% 67%, #5ad17a 67% 73%, #ffe14d 73% 79%, #ffa53a 79% 85%, #ff5c8a 85% 91%, transparent 91%); }
+.fireball { border-radius: 50%; background: radial-gradient(circle, #fff7c2 0 15%, #ffd21f 30%, #ff8a1f 50%, #ff3b3b 68%, rgba(255,59,59,0) 72%); }
+.blob { border-radius: 50%; }
+.trail { transform-origin: 0 50%; border-radius: 999px;
+  background: linear-gradient(to bottom, #ff5c8a 0 16.6%, #ffa53a 0 33.3%, #ffe14d 0 50%, #5ad17a 0 66.6%, #4fb3ff 0 83.3%, #9b6bff 0); }
+.smoke { border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffffff, #e6e0ef 60%, #c9c0d8); box-shadow: 0 4px 0 rgba(120,100,150,0.25); }
+.puffsolid { border-radius: 50%; box-shadow: inset -6px -8px 0 rgba(0,0,0,0.12), inset 6px 6px 0 rgba(255,255,255,0.35); }
+.wave { width: 160vmax; height: 40vmax; border-radius: 50%; border: 18px solid rgba(255,255,255,0.9); box-shadow: 0 0 30px #fff; }
+.flash { width: 100vw; height: 100vh; background: #fff; left: 0; top: 0; }
 .burst { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 50; line-height: 1; will-change: transform, opacity; }
 </style>
 </head>
@@ -481,61 +497,270 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     return true;
   }
 
-  // Unicorns and rainbows explode out of the equation: a rainbow ring, a giant
-  // unicorn that pops up and zooms off, a shower of bouncing pieces, and a screen shake.
+  // Celebration: every correct equation gets a random mix of unicorn, rainbow and
+  // explosion effects, plus a shower of pieces and a screen shake.
+  var FUN = ["\u{1F984}", "\u{1F308}", "\u{1F4A5}", "\u2728", "\u{1F4AB}",
+             "\u2B50", "\u{1F31F}", "\u{1F525}", "\u{1F496}", "\u{1F389}"];
+  function rnd(list) { return list[Math.floor(Math.random() * list.length)]; }
+
   function celebrate() {
     var r = $("eqbar").getBoundingClientRect();
     var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    var W = window.innerWidth, H = window.innerHeight, far = Math.max(W, H);
+    var W = window.innerWidth, H = window.innerHeight, far = Math.max(W, H), small = Math.min(W, H);
     var at = function (x, y) { return "translate(" + x + "px," + y + "px) translate(-50%,-50%) "; };
-    function piece(txt, size) {
-      var p = document.createElement("span");
-      p.className = "burst";
-      p.textContent = txt;
-      p.style.fontSize = size + "px";
+    function piece(txt, size, cls) {
+      var p = document.createElement(txt ? "span" : "div");
+      p.className = "burst" + (cls ? " " + cls : "");
+      if (txt) { p.textContent = txt; p.style.fontSize = size + "px"; }
       document.body.appendChild(p);
       return p;
     }
-    function done(anim, n) { anim.onfinish = function () { n.remove(); }; }
-
-    // Rainbow ring that blasts outward.
-    var ring = document.createElement("div");
-    ring.className = "burst ring";
-    document.body.appendChild(ring);
-    done(ring.animate([
-      { transform: at(cx, cy) + "scale(0)", opacity: 1 },
-      { transform: at(cx, cy) + "scale(1)", opacity: 0.9, offset: 0.5 },
-      { transform: at(cx, cy) + "scale(1.6)", opacity: 0 }
-    ], { duration: 900, easing: "ease-out" }), ring);
-
-    // Giant unicorn: pops up with a cartoon boing, wiggles, then zooms off screen.
-    var big = piece("\u{1F984}", Math.min(W, H) * 0.45);
-    var dir = Math.random() < 0.5 ? -1 : 1;
-    done(big.animate([
-      { transform: at(cx, cy) + "scale(0) rotate(0deg)" },
-      { transform: at(cx, cy) + "scale(1.35) rotate(" + (-12 * dir) + "deg)", offset: 0.18 },
-      { transform: at(cx, cy) + "scale(0.9,1.1) rotate(" + (10 * dir) + "deg)", offset: 0.28 },
-      { transform: at(cx, cy) + "scale(1.1,0.9) rotate(" + (-8 * dir) + "deg)", offset: 0.38 },
-      { transform: at(cx, cy) + "scale(1) rotate(0deg)", offset: 0.5 },
-      { transform: at(cx + dir * far * 1.2, cy - H * 0.5) + "scale(0.6) rotate(" + (40 * dir) + "deg)" }
-    ], { duration: 1700, easing: "ease-in-out" }), big);
-
-    // Shower of unicorns, rainbows and sparkles that bounce out and fall.
-    var kinds = ["\u{1F984}", "\u{1F308}", "\u{1F308}", "\u{1F984}", "\u2728", "\u2B50"];
-    for (var i = 0; i < 44; i++) {
-      var p = piece(kinds[i % kinds.length], 40 + Math.random() * 80);
-      var a = Math.random() * Math.PI * 2, d = far * (0.35 + Math.random() * 0.45);
-      var dx = Math.cos(a) * d, dy = Math.sin(a) * d - H * 0.15, spin = (Math.random() - 0.5) * 1080;
-      done(p.animate([
-        { transform: at(cx, cy) + "scale(0) rotate(0deg)", opacity: 1 },
-        { transform: at(cx + dx * 0.8, cy + dy * 0.8) + "scale(1.5,0.7) rotate(" + spin * 0.3 + "deg)", opacity: 1, offset: 0.3 },
-        { transform: at(cx + dx, cy + dy) + "scale(0.8,1.3) rotate(" + spin * 0.5 + "deg)", opacity: 1, offset: 0.45 },
-        { transform: at(cx + dx * 1.1, cy + dy) + "scale(1) rotate(" + spin * 0.6 + "deg)", opacity: 1, offset: 0.55 },
-        { transform: at(cx + dx * 1.3, H + 150) + "scale(1) rotate(" + spin + "deg)", opacity: 1 }
-      ], { duration: 1800 + Math.random() * 900, delay: Math.random() * 250, easing: "cubic-bezier(.2,.6,.5,1)", fill: "backwards" }), p);
+    function go(n, frames, opts) { n.animate(frames, opts).onfinish = function () { n.remove(); }; }
+    function shower(x, y, count, pool, reach) {
+      for (var i = 0; i < count; i++) {
+        var p = piece(rnd(pool), 36 + Math.random() * 80);
+        var a = Math.random() * Math.PI * 2, d = reach * (0.4 + Math.random() * 0.6);
+        var dx = Math.cos(a) * d, dy = Math.sin(a) * d - H * 0.12, spin = (Math.random() - 0.5) * 1080;
+        go(p, [
+          { transform: at(x, y) + "scale(0) rotate(0deg)" },
+          { transform: at(x + dx * 0.8, y + dy * 0.8) + "scale(1.5,0.7) rotate(" + spin * 0.3 + "deg)", offset: 0.3 },
+          { transform: at(x + dx, y + dy) + "scale(0.8,1.3) rotate(" + spin * 0.5 + "deg)", offset: 0.45 },
+          { transform: at(x + dx * 1.1, y + dy) + "scale(1) rotate(" + spin * 0.6 + "deg)", offset: 0.55 },
+          { transform: at(x + dx * 1.3, H + 150) + "scale(1) rotate(" + spin + "deg)" }
+        ], { duration: 1800 + Math.random() * 900, delay: Math.random() * 250, easing: "cubic-bezier(.2,.6,.5,1)", fill: "backwards" });
+      }
     }
 
-    // Screen shake.
+    var acts = [
+      function bigUnicorn() { // pops up, boings, zooms off a corner
+        var n = piece("\u{1F984}", small * 0.45), d = Math.random() < 0.5 ? -1 : 1;
+        go(n, [
+          { transform: at(cx, cy) + "scale(0) rotate(0deg)" },
+          { transform: at(cx, cy) + "scale(1.35) rotate(" + (-12 * d) + "deg)", offset: 0.18 },
+          { transform: at(cx, cy) + "scale(0.9,1.1) rotate(" + (10 * d) + "deg)", offset: 0.28 },
+          { transform: at(cx, cy) + "scale(1.1,0.9) rotate(" + (-8 * d) + "deg)", offset: 0.38 },
+          { transform: at(cx, cy) + "scale(1) rotate(0deg)", offset: 0.5 },
+          { transform: at(cx + d * far * 1.2, cy - H * 0.5) + "scale(0.6) rotate(" + (40 * d) + "deg)" }
+        ], { duration: 1700, easing: "ease-in-out" });
+      },
+      function kaboom() { // white flash and a giant explosion
+        go(piece("", 0, "flash"), [{ opacity: 0.9 }, { opacity: 0 }], { duration: 400, easing: "ease-out" });
+        var n = piece("\u{1F4A5}", small * 0.6);
+        go(n, [
+          { transform: at(cx, cy) + "scale(0) rotate(-20deg)", opacity: 1 },
+          { transform: at(cx, cy) + "scale(1.4) rotate(10deg)", opacity: 1, offset: 0.25 },
+          { transform: at(cx, cy) + "scale(1.2) rotate(0deg)", opacity: 1, offset: 0.6 },
+          { transform: at(cx, cy) + "scale(2) rotate(0deg)", opacity: 0 }
+        ], { duration: 1100, easing: "ease-out" });
+      },
+      function rainbowRing() { // stripes blast outward
+        go(piece("", 0, "ring"), [
+          { transform: at(cx, cy) + "scale(0)", opacity: 1 },
+          { transform: at(cx, cy) + "scale(1)", opacity: 0.9, offset: 0.5 },
+          { transform: at(cx, cy) + "scale(1.6)", opacity: 0 }
+        ], { duration: 900, easing: "ease-out" });
+      },
+      function bigRainbow() { // a huge rainbow rises up and stretches across the screen
+        var n = piece("\u{1F308}", small * 0.5);
+        go(n, [
+          { transform: at(cx, H + small * 0.3) + "scale(0.5)" },
+          { transform: at(cx, cy) + "scale(" + (W / (small * 0.5)) + ",1.6)", offset: 0.35 },
+          { transform: at(cx, cy) + "scale(" + (W / (small * 0.5) * 0.9) + ",1.8)", offset: 0.7 },
+          { transform: at(cx, -small * 0.5) + "scale(1)" }
+        ], { duration: 1800, easing: "ease-in-out" });
+      },
+      function parade() { // a line of unicorns gallops across with rainbows behind
+        var d = Math.random() < 0.5 ? -1 : 1, y = cy + (Math.random() - 0.5) * H * 0.4;
+        for (var i = 0; i < 7; i++) {
+          var n = piece(i % 2 ? "\u{1F308}" : "\u{1F984}", small * 0.14);
+          var x0 = d > 0 ? -150 : W + 150, x1 = d > 0 ? W + 150 : -150, flip = d > 0 ? "scaleX(-1) " : "";
+          go(n, [
+            { transform: at(x0, y) + flip + "translateY(0)" },
+            { transform: at((x0 + x1) / 4, y) + flip + "translateY(-60px)", offset: 0.25 },
+            { transform: at((x0 + x1) / 2, y) + flip + "translateY(0)", offset: 0.5 },
+            { transform: at((x0 + x1) * 3 / 4, y) + flip + "translateY(-60px)", offset: 0.75 },
+            { transform: at(x1, y) + flip + "translateY(0)" }
+          ], { duration: 1600, delay: i * 120, easing: "linear", fill: "backwards" });
+        }
+      },
+      function fireworks() { // explosions pop at random spots around the screen
+        for (var k = 0; k < 4; k++) {
+          (function (k) {
+            setTimeout(function () {
+              var x = W * (0.15 + Math.random() * 0.7), y = H * (0.1 + Math.random() * 0.5);
+              var n = piece(rnd(["\u{1F4A5}", "\u{1F31F}", "\u{1F308}"]), small * 0.2);
+              go(n, [{ transform: at(x, y) + "scale(0)", opacity: 1 }, { transform: at(x, y) + "scale(1.5)", opacity: 1, offset: 0.4 },
+                     { transform: at(x, y) + "scale(2)", opacity: 0 }], { duration: 700, easing: "ease-out" });
+              shower(x, y, 8, FUN, far * 0.25);
+            }, k * 220);
+          })(k);
+        }
+      },
+      function rainbowBeam() { // a rainbow shoots straight up out of the equation with a splash
+        var n = piece("", 0, "beam");
+        n.style.width = Math.min(r.width, small * 0.5) + "px";
+        n.style.left = cx + "px"; n.style.top = "0px"; n.style.height = cy + "px";
+        go(n, [
+          { transform: "translateX(-50%) scaleY(0)", opacity: 1 },
+          { transform: "translateX(-50%) scaleY(1)", opacity: 1, offset: 0.25 },
+          { transform: "translateX(-50%) scaleY(1)", opacity: 1, offset: 0.75 },
+          { transform: "translateX(-50%) scaleY(1)", opacity: 0 }
+        ], { duration: 1600, easing: "ease-out" });
+        shower(cx, cy, 14, ["\u2728", "\u{1F4A6}", "\u{1F4AB}"], far * 0.2);
+      },
+      function shardBurst() { // spiky rainbow shards explode around a unicorn
+        var cols = ["#ff3b6b", "#ff8a1f", "#ffd21f", "#3fcf6a", "#2fa8ff", "#7a5cff", "#e04cff"];
+        for (var k = 0; k < 40; k++) {
+          var sh = piece("", 0, "shard"), ang = k * 9 + Math.random() * 6, len = small * (0.25 + Math.random() * 0.3);
+          sh.style.background = cols[k % cols.length];
+          sh.style.height = len + "px"; sh.style.width = (len * 0.22) + "px";
+          sh.style.left = cx + "px"; sh.style.top = cy + "px";
+          go(sh, [
+            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(0) scaleY(0)", opacity: 1 },
+            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(-" + len * 0.3 + "px) scaleY(1)", opacity: 1, offset: 0.35 },
+            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(-" + len * 1.6 + "px) scaleY(0.6)", opacity: 0 }
+          ], { duration: 1000 + Math.random() * 400, easing: "ease-out" });
+        }
+        var u = piece("\u{1F984}", small * 0.3);
+        go(u, [{ transform: at(cx, cy) + "scale(0)" }, { transform: at(cx, cy) + "scale(1.2)", offset: 0.3 },
+               { transform: at(cx, cy) + "scale(1)", offset: 0.75 }, { transform: at(cx, cy) + "scale(0)" }], { duration: 1400, easing: "ease-out" });
+      },
+      function fireworkUnicorn() { // the sky goes dark and a glowing unicorn bursts like fireworks
+        go(piece("", 0, "night"), [{ opacity: 0 }, { opacity: 0.85, offset: 0.15 }, { opacity: 0.85, offset: 0.7 }, { opacity: 0 }], { duration: 1900 });
+        var u = piece("\u{1F984}", small * 0.4, "glow");
+        go(u, [
+          { transform: at(cx, cy) + "scale(0.3)", opacity: 0, filter: "hue-rotate(0deg) brightness(1.4)" },
+          { transform: at(cx, cy) + "scale(1)", opacity: 1, offset: 0.2 },
+          { transform: at(cx, cy) + "scale(1.05)", opacity: 1, offset: 0.7, filter: "hue-rotate(300deg) brightness(1.4)" },
+          { transform: at(cx, cy) + "scale(1.3)", opacity: 0, filter: "hue-rotate(360deg) brightness(2)" }
+        ], { duration: 1900, easing: "ease-out" });
+        var cols = ["#ff5c8a", "#ffa53a", "#ffe14d", "#5ad17a", "#4fb3ff", "#9b6bff", "#fff"];
+        for (var k = 0; k < 36; k++) {
+          var st = piece("", 0, "streak"), ang = Math.random() * 360, len = small * (0.08 + Math.random() * 0.1);
+          st.style.background = "linear-gradient(to top, transparent, " + cols[k % cols.length] + ")";
+          st.style.height = len + "px"; st.style.left = cx + "px"; st.style.top = cy + "px";
+          go(st, [
+            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(0)", opacity: 0 },
+            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(-" + small * 0.2 + "px)", opacity: 1, offset: 0.3 },
+            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(-" + small * 0.45 + "px)", opacity: 0 }
+          ], { duration: 1300, delay: 200 + Math.random() * 300, easing: "ease-out", fill: "backwards" });
+        }
+      },
+      function colorCloud() { // rainbow paint puffs bloom while a unicorn leaps through
+        var cols = ["#ff3b6b", "#ff8a1f", "#ffd21f", "#3fcf6a", "#2fa8ff", "#7a5cff", "#ff5cf0"];
+        for (var k = 0; k < 22; k++) {
+          var pf = piece("", 0, "puff"), sz = small * (0.15 + Math.random() * 0.25);
+          var x = cx + (Math.random() - 0.5) * W * 0.9, y = cy + (Math.random() - 0.5) * H * 0.6;
+          pf.style.background = cols[k % cols.length]; pf.style.width = pf.style.height = sz + "px";
+          go(pf, [{ transform: at(x, y) + "scale(0)", opacity: 0.9 }, { transform: at(x, y) + "scale(1.3)", opacity: 0.8, offset: 0.4 },
+                  { transform: at(x, y - 40) + "scale(1.8)", opacity: 0 }], { duration: 1500, delay: Math.random() * 300, easing: "ease-out", fill: "backwards" });
+        }
+        var d = Math.random() < 0.5 ? -1 : 1, x0 = d > 0 ? -small * 0.3 : W + small * 0.3, flip = d > 0 ? "scaleX(-1) " : "";
+        var u = piece("\u{1F984}", small * 0.35);
+        go(u, [{ transform: at(x0, H * 0.85) + flip + "rotate(0deg)" },
+               { transform: at(W / 2, H * 0.25) + flip + "rotate(-15deg)", offset: 0.5 },
+               { transform: at(W - x0, H * 0.85) + flip + "rotate(10deg)" }], { duration: 1600, easing: "ease-in-out" });
+      },
+      function rainbowKaboom() { // fiery blast with a rainbow arch over it and a unicorn in front
+        var arc = piece("", 0, "arch"), aw = Math.min(W * 0.9, small * 1.1);
+        arc.style.width = aw + "px"; arc.style.height = (aw / 2) + "px";
+        go(arc, [{ transform: at(cx, cy - aw * 0.1) + "scale(0)", opacity: 1 },
+                 { transform: at(cx, cy - aw * 0.1) + "scale(1)", opacity: 1, offset: 0.3 },
+                 { transform: at(cx, cy - aw * 0.1) + "scale(1)", opacity: 1, offset: 0.75 },
+                 { transform: at(cx, cy - aw * 0.1) + "scale(1.1)", opacity: 0 }], { duration: 1800, easing: "ease-out" });
+        var fb = piece("", 0, "fireball"), fs = small * 0.55;
+        fb.style.width = fb.style.height = fs + "px";
+        go(fb, [{ transform: at(cx, cy) + "scale(0)", opacity: 1 }, { transform: at(cx, cy) + "scale(1.2)", opacity: 1, offset: 0.25 },
+                { transform: at(cx, cy) + "scale(1)", opacity: 0.9, offset: 0.6 }, { transform: at(cx, cy) + "scale(1.5)", opacity: 0 }], { duration: 1500, easing: "ease-out" });
+        var u = piece("\u{1F984}", small * 0.25);
+        go(u, [{ transform: at(cx, cy) + "scale(0)" }, { transform: at(cx, cy) + "scale(1.3)", offset: 0.25 },
+               { transform: at(cx, cy) + "scale(1)", offset: 0.4 }, { transform: at(cx, cy) + "scale(1)", offset: 0.8 },
+               { transform: at(cx, cy) + "scale(0)" }], { duration: 1700, easing: "ease-out" });
+        shower(cx, cy, 10, ["\u{1F525}", "\u{1F4A5}", "\u2728"], far * 0.3);
+      },
+      function rainbowSpew() { // a silly unicorn hops in and sprays a rainbow that splats
+        var cols = ["#ff3b6b", "#ff8a1f", "#ffd21f", "#3fcf6a", "#2fa8ff", "#7a5cff"];
+        var us = small * 0.3, ux = W * 0.78, uy = H * 0.45;
+        var u = piece("\u{1F984}", us);
+        go(u, [{ transform: at(W + us, uy) + "rotate(0deg)" }, { transform: at(ux, uy - 40) + "rotate(-10deg)", offset: 0.12 },
+               { transform: at(ux, uy) + "rotate(8deg)", offset: 0.2 }, { transform: at(ux, uy) + "rotate(-6deg) scale(1.05,0.95)", offset: 0.5 },
+               { transform: at(ux, uy) + "rotate(6deg) scale(0.95,1.05)", offset: 0.8 }, { transform: at(W + us, uy) + "rotate(0deg)" }],
+           { duration: 2300, easing: "ease-in-out" });
+        var mx = ux - us * 0.35, my = uy + us * 0.1;
+        for (var k = 0; k < 30; k++) {
+          var b = piece("", 0, "blob"), c = cols[k % cols.length], bs = small * 0.05;
+          b.style.background = c; b.style.width = b.style.height = bs + "px";
+          var tx = W * (0.08 + Math.random() * 0.35), ty = H * (0.7 + Math.random() * 0.18);
+          var peak = Math.min(my, ty) - H * (0.15 + Math.random() * 0.1);
+          go(b, [{ transform: at(mx, my) + "scale(0.5)" }, { transform: at((mx + tx) / 2, peak) + "scale(1.2)", offset: 0.5 },
+                 { transform: at(tx, ty) + "scale(2.4,0.7)", offset: 0.85 }, { transform: at(tx, ty) + "scale(2.6,0.6)", opacity: 0 }],
+             { duration: 1300, delay: 350 + k * 35, easing: "linear", fill: "backwards" });
+        }
+      },
+      function zoomCrash() { // a unicorn streaks in with a rainbow trail and crashes into a puffy cloud
+        var d = Math.random() < 0.5 ? -1 : 1, sx = d > 0 ? -small * 0.2 : W + small * 0.2, sy = H * 0.05;
+        var ex = cx, ey = cy, flip = d > 0 ? "scaleX(-1) " : "";
+        var ang = Math.atan2(ey - sy, ex - sx) * 180 / Math.PI, len = Math.hypot(ex - sx, ey - sy);
+        var trail = piece("", 0, "trail");
+        trail.style.width = len + "px"; trail.style.height = small * 0.09 + "px";
+        trail.style.left = sx + "px"; trail.style.top = sy + "px";
+        go(trail, [{ transform: "translateY(-50%) rotate(" + ang + "deg) scaleX(0)", opacity: 1 },
+                   { transform: "translateY(-50%) rotate(" + ang + "deg) scaleX(1)", opacity: 1, offset: 0.25 },
+                   { transform: "translateY(-50%) rotate(" + ang + "deg) scaleX(1)", opacity: 0 }], { duration: 1500, easing: "ease-out" });
+        var u = piece("\u{1F984}", small * 0.18);
+        go(u, [{ transform: at(sx, sy) + flip }, { transform: at(ex, ey) + flip + "scale(1.2)", offset: 0.95 }, { transform: at(ex, ey) + flip + "scale(0)" }],
+           { duration: 400, easing: "ease-in" });
+        setTimeout(function () {
+          for (var k = 0; k < 16; k++) {
+            var pf = piece("", 0, "smoke"), sz = small * (0.12 + Math.random() * 0.16);
+            var a = Math.random() * Math.PI * 2, dd = small * (0.05 + Math.random() * 0.22);
+            var x = ex + Math.cos(a) * dd, y = ey + Math.sin(a) * dd * 0.7;
+            pf.style.width = pf.style.height = sz + "px";
+            go(pf, [{ transform: at(ex, ey) + "scale(0)", opacity: 1 }, { transform: at(x, y) + "scale(1)", opacity: 1, offset: 0.3 },
+                    { transform: at(x, y - 30) + "scale(1.3)", opacity: 1, offset: 0.7 }, { transform: at(x, y - 50) + "scale(1.5)", opacity: 0 }],
+               { duration: 1500, easing: "ease-out" });
+          }
+          var bang = piece("\u{1F4A5}", small * 0.3);
+          go(bang, [{ transform: at(ex, ey) + "scale(0)" }, { transform: at(ex, ey) + "scale(1.3)", offset: 0.3 }, { transform: at(ex, ey) + "scale(1.6)", opacity: 0 }],
+             { duration: 800, easing: "ease-out" });
+          shower(ex, ey, 10, ["\u2B50", "\u{1F4AB}", "\u{1F984}"], far * 0.3);
+        }, 380);
+      },
+      function rainbowBomb() { // atomic rainbow bomb: flash, shockwave, rainbow mushroom cloud
+        go(piece("", 0, "flash"), [{ opacity: 1 }, { opacity: 0 }], { duration: 600, easing: "ease-out" });
+        var gy = Math.min(H * 0.85, cy + small * 0.25);
+        var wave = piece("", 0, "wave");
+        go(wave, [{ transform: at(cx, gy) + "scale(0)", opacity: 1 }, { transform: at(cx, gy) + "scale(1)", opacity: 0 }], { duration: 1000, easing: "ease-out" });
+        var cols = ["#ff3b6b", "#ff8a1f", "#ffd21f", "#3fcf6a", "#2fa8ff", "#7a5cff"];
+        var top = Math.max(small * 0.25, gy - small * 0.7), stemW = small * 0.12;
+        for (var k = 0; k < 10; k++) { // stem of puffs climbing up
+          var y = gy - (gy - top) * (k / 10), st = piece("", 0, "puffsolid"), sz = stemW * (1 + Math.random() * 0.4);
+          st.style.width = st.style.height = sz + "px"; st.style.background = cols[k % cols.length];
+          go(st, [{ transform: at(cx, gy) + "scale(0.3)", opacity: 1 }, { transform: at(cx + (Math.random() - 0.5) * 20, y) + "scale(1)", opacity: 1, offset: 0.3 },
+                  { transform: at(cx, y - 20) + "scale(1.2)", opacity: 1, offset: 0.8 }, { transform: at(cx, y - 40) + "scale(1.3)", opacity: 0 }],
+             { duration: 2400, delay: 150 + k * 40, easing: "ease-out", fill: "backwards" });
+        }
+        for (var k = 0; k < 26; k++) { // mushroom cap in rainbow rings
+          var ring = k % 6, a = Math.random() * Math.PI * 2, rr = small * (0.06 + ring * 0.045);
+          var x = cx + Math.cos(a) * rr * 1.6, y = top + Math.sin(a) * rr * 0.7;
+          var cp = piece("", 0, "puffsolid"), sz = small * (0.12 + Math.random() * 0.08);
+          cp.style.width = cp.style.height = sz + "px"; cp.style.background = cols[ring];
+          go(cp, [{ transform: at(cx, gy) + "scale(0)", opacity: 1 }, { transform: at(x, y) + "scale(1)", opacity: 1, offset: 0.35 },
+                  { transform: at(x, y - 30) + "scale(1.25)", opacity: 1, offset: 0.8 }, { transform: at(x, y - 50) + "scale(1.4)", opacity: 0 }],
+             { duration: 2500, delay: 350 + Math.random() * 200, easing: "ease-out", fill: "backwards" });
+        }
+        var bang = piece("\u{1F4A5}", small * 0.35);
+        go(bang, [{ transform: at(cx, gy) + "scale(0)" }, { transform: at(cx, gy) + "scale(1.4)", offset: 0.3 }, { transform: at(cx, gy) + "scale(1.8)", opacity: 0 }],
+           { duration: 900, easing: "ease-out" });
+        $("app").animate([{ transform: "translate(0,0)" }, { transform: "translate(-22px,14px) rotate(-2deg)" }, { transform: "translate(20px,-16px) rotate(2deg)" },
+          { transform: "translate(-14px,10px)" }, { transform: "translate(10px,-6px)" }, { transform: "translate(0,0)" }], { duration: 700, delay: 100, easing: "ease-out" });
+      }
+    ];
+
+    // Two different random acts each time, plus the shower and a shake.
+    var i = Math.floor(Math.random() * acts.length), j = (i + 1 + Math.floor(Math.random() * (acts.length - 1))) % acts.length;
+    acts[i](); acts[j]();
+    shower(cx, cy, 36, FUN, far * 0.8);
     $("app").animate([
       { transform: "translate(0,0)" }, { transform: "translate(-14px,8px) rotate(-1deg)" },
       { transform: "translate(12px,-10px) rotate(1deg)" }, { transform: "translate(-8px,6px)" },
