@@ -194,24 +194,8 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
 @media (max-width: 620px) {
   .brand { font-size: 20px; }
 }
-.ring { width: 140vmax; height: 140vmax; border-radius: 50%;
-  background: radial-gradient(circle, transparent 52%, #ff5c8a 53%, #ff5c8a 56%, #ffa53a 57%, #ffa53a 60%, #ffe14d 61%, #ffe14d 64%, #5ad17a 65%, #5ad17a 68%, #4fb3ff 69%, #4fb3ff 72%, #9b6bff 73%, #9b6bff 76%, transparent 77%); }
-.beam { transform-origin: 50% 100%; border-radius: 12px 12px 0 0;
-  background: linear-gradient(to right, #ff5c8a 0 16.6%, #ffa53a 0 33.3%, #ffe14d 0 50%, #5ad17a 0 66.6%, #4fb3ff 0 83.3%, #9b6bff 0); }
-.shard { transform-origin: 50% 100%; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
-.night { width: 100vw; height: 100vh; background: #120a2a; left: 0; top: 0; }
-.glow { text-shadow: 0 0 20px #fff, 0 0 40px #ff5cf0, 0 0 70px #4fb3ff; }
-.streak { width: 5px; border-radius: 3px; transform-origin: 50% 100%; }
-.puff { border-radius: 50%; filter: blur(6px); }
-.arch { border-radius: 9999px 9999px 0 0; background: radial-gradient(ellipse 50% 100% at 50% 100%, transparent 55%, #9b6bff 55% 61%, #4fb3ff 61% 67%, #5ad17a 67% 73%, #ffe14d 73% 79%, #ffa53a 79% 85%, #ff5c8a 85% 91%, transparent 91%); }
-.fireball { border-radius: 50%; background: radial-gradient(circle, #fff7c2 0 15%, #ffd21f 30%, #ff8a1f 50%, #ff3b3b 68%, rgba(255,59,59,0) 72%); }
-.blob { border-radius: 50%; }
-.trail { transform-origin: 0 50%; border-radius: 999px;
-  background: linear-gradient(to bottom, #ff5c8a 0 16.6%, #ffa53a 0 33.3%, #ffe14d 0 50%, #5ad17a 0 66.6%, #4fb3ff 0 83.3%, #9b6bff 0); }
-.smoke { border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffffff, #e6e0ef 60%, #c9c0d8); box-shadow: 0 4px 0 rgba(120,100,150,0.25); }
-.puffsolid { border-radius: 50%; box-shadow: inset -6px -8px 0 rgba(0,0,0,0.12), inset 6px 6px 0 rgba(255,255,255,0.35); }
-.wave { width: 160vmax; height: 40vmax; border-radius: 50%; border: 18px solid rgba(255,255,255,0.9); box-shadow: 0 0 30px #fff; }
-.flash { width: 100vw; height: 100vh; background: #fff; left: 0; top: 0; }
+.confetti { border: 2.5px solid #2b2140; border-radius: 3px; box-sizing: border-box; }
+.flash { background: #fff; }
 .burst { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 50; line-height: 1; will-change: transform, opacity; }
 </style>
 </head>
@@ -497,275 +481,266 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     return true;
   }
 
-  // Celebration: every correct equation gets a random mix of unicorn, rainbow and
-  // explosion effects, plus a shower of pieces and a screen shake.
-  var FUN = ["\u{1F984}", "\u{1F308}", "\u{1F4A5}", "\u2728", "\u{1F4AB}",
-             "\u2B50", "\u{1F31F}", "\u{1F525}", "\u{1F496}", "\u{1F389}"];
+  // Celebration art. Everything is drawn here as flat cartoon SVG with thick dark
+  // outlines in one palette, so every effect looks like it came from the same cartoon.
+  // Each correct equation plays one short, choreographed scene, picked at random.
+  var INK = "#2b2140";
+  var RAINBOW = ["#ff4f7b", "#ff9a3c", "#ffd93d", "#4ccf7a", "#3fa9f5", "#8e6cf0"];
+  var POP = "cubic-bezier(.34,1.56,.64,1)"; // overshoot, for a cartoon snap
+  var fxId = 0, lastScene = -1;
+
   function rnd(list) { return list[Math.floor(Math.random() * list.length)]; }
+
+  // The unicorn's body outline: drawn once fat and dark, then again in white on top,
+  // so the outline traces the whole silhouette without lines where parts join.
+  var UNICORN_SHAPE =
+    '<ellipse cx="95" cy="95" rx="48" ry="30"/>' +
+    '<polygon points="116,84 136,42 168,56 148,106"/>' +
+    '<circle cx="160" cy="46" r="27"/>' +
+    '<ellipse cx="184" cy="60" rx="21" ry="16"/>' +
+    '<polygon points="141,28 146,2 160,22"/>' +
+    '<rect x="126" y="96" width="15" height="48" rx="7.5" transform="rotate(-62 133 100)"/>' +
+    '<rect x="122" y="98" width="15" height="48" rx="7.5" transform="rotate(-38 129 102)"/>' +
+    '<rect x="56" y="96" width="15" height="48" rx="7.5" transform="rotate(62 63 100)"/>' +
+    '<rect x="62" y="98" width="15" height="48" rx="7.5" transform="rotate(38 69 102)"/>';
+
+  function unicornSVG() {
+    var o = ' stroke="' + INK + '" stroke-linejoin="round" ';
+    var hoof = function (x, y, rot) {
+      return '<rect x="' + x + '" y="' + (y + 34) + '" width="15" height="14" rx="7" transform="rotate(' + rot + ')" fill="#c7b5ff"/>';
+    };
+    var mane = [[116, 84, 12, 4], [121, 69, 13, 3], [127, 54, 13, 2], [134, 40, 12, 1], [144, 28, 11, 0], [156, 20, 9, 5]];
+    var m = "";
+    mane.forEach(function (c) { m += '<circle cx="' + c[0] + '" cy="' + c[1] + '" r="' + c[2] + '" fill="' + RAINBOW[c[3]] + '"' + o + 'stroke-width="4"/>'; });
+    return '<svg viewBox="-8 -8 236 186" width="100%" height="100%" overflow="visible">' +
+      '<g' + o + 'stroke-width="5">' +
+        '<ellipse cx="34" cy="74" rx="30" ry="12" transform="rotate(-30 34 74)" fill="' + RAINBOW[0] + '"/>' +
+        '<ellipse cx="28" cy="90" rx="31" ry="12" transform="rotate(-6 28 90)" fill="' + RAINBOW[2] + '"/>' +
+        '<ellipse cx="32" cy="106" rx="30" ry="12" transform="rotate(18 32 106)" fill="' + RAINBOW[4] + '"/>' +
+      '</g>' +
+      '<g fill="' + INK + '"' + o + 'stroke-width="10">' + UNICORN_SHAPE + '</g>' +
+      '<g fill="#fff">' + UNICORN_SHAPE + '</g>' +
+      hoof(126, 96, "-62 133 100") + hoof(122, 98, "-38 129 102") + hoof(56, 96, "62 63 100") + hoof(62, 98, "38 69 102") +
+      '<ellipse cx="185" cy="60" rx="19" ry="14" fill="#ffd6e7"/>' +
+      m +
+      '<polygon points="158,22 180,-8 172,26" fill="' + RAINBOW[2] + '"' + o + 'stroke-width="4"/>' +
+      '<path d="M162 14 L173 17 M167 5 L176 8" stroke="' + INK + '" stroke-width="3" stroke-linecap="round"/>' +
+      '<circle cx="167" cy="40" r="10" fill="#fff"' + o + 'stroke-width="3.5"/>' +
+      '<circle cx="170" cy="41" r="5.5" fill="' + INK + '"/>' +
+      '<circle cx="172" cy="38.5" r="2" fill="#fff"/>' +
+      '<ellipse cx="158" cy="60" rx="6" ry="4" fill="#ff9cc2"/>' +
+      '<ellipse cx="197" cy="55" rx="2.2" ry="3" fill="' + INK + '"/>' +
+      '<path d="M180 68 Q192 83 203 64 Z" fill="#ff6f91"' + o + 'stroke-width="3"/>' +
+      '</svg>';
+  }
+
+  function starPoints(n, R, r, jitter) {
+    var pts = [];
+    for (var i = 0; i < n * 2; i++) {
+      var a = Math.PI * i / n - Math.PI / 2, rad = (i % 2 ? r : R) * (1 + (Math.random() - 0.5) * jitter);
+      pts.push((100 + Math.cos(a) * rad).toFixed(1) + "," + (100 + Math.sin(a) * rad).toFixed(1));
+    }
+    return pts.join(" ");
+  }
+
+  // Comic-book explosion with a word in the middle.
+  function boomSVG(word) {
+    var o = ' stroke="' + INK + '" stroke-linejoin="round" ';
+    return '<svg viewBox="0 0 200 200" width="100%" height="100%" overflow="visible">' +
+      '<polygon points="' + starPoints(12, 100, 66, 0.22) + '" fill="' + RAINBOW[0] + '"' + o + 'stroke-width="6"/>' +
+      '<polygon points="' + starPoints(12, 82, 58, 0.12) + '" fill="' + RAINBOW[1] + '"' + o + 'stroke-width="5"/>' +
+      '<polygon points="' + starPoints(10, 66, 52, 0.08) + '" fill="' + RAINBOW[2] + '"' + o + 'stroke-width="5"/>' +
+      '<text x="100" y="102" text-anchor="middle" dominant-baseline="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="' +
+      (word.length > 5 ? 26 : 36) + '" fill="#fff"' + o + 'stroke-width="8" paint-order="stroke" transform="rotate(-8 100 100)">' + word + '</text>' +
+      '</svg>';
+  }
+
+  // Paint splat: a lumpy blob plus a few drops.
+  function splatSVG(color) {
+    var n = 14, pts = [], d, i;
+    for (i = 0; i < n; i++) {
+      var a = 2 * Math.PI * i / n, rad = i % 2 ? 48 + Math.random() * 10 : 70 + Math.random() * 22;
+      pts.push([100 + Math.cos(a) * rad, 100 + Math.sin(a) * rad]);
+    }
+    var mid = function (p, q) { return ((p[0] + q[0]) / 2).toFixed(1) + " " + ((p[1] + q[1]) / 2).toFixed(1); };
+    d = "M" + mid(pts[n - 1], pts[0]);
+    for (i = 0; i < n; i++) d += " Q" + pts[i][0].toFixed(1) + " " + pts[i][1].toFixed(1) + " " + mid(pts[i], pts[(i + 1) % n]);
+    var drops = "";
+    for (i = 0; i < 4; i++) {
+      var b = Math.random() * Math.PI * 2, dist = 100 + Math.random() * 18;
+      drops += '<circle cx="' + (100 + Math.cos(b) * dist).toFixed(1) + '" cy="' + (100 + Math.sin(b) * dist).toFixed(1) + '" r="' + (6 + Math.random() * 6).toFixed(1) + '"/>';
+    }
+    return '<svg viewBox="0 0 200 200" width="100%" height="100%" overflow="visible"><g fill="' + color + '" stroke="' + INK + '" stroke-width="5" stroke-linejoin="round">' +
+      '<path d="' + d + 'Z"/>' + drops + '</g>' +
+      '<ellipse cx="78" cy="76" rx="14" ry="8" transform="rotate(-30 78 76)" fill="#fff" opacity="0.55"/></svg>';
+  }
+
+  // Rainbow mushroom cloud.
+  function cloudSVG() {
+    var id = "fx" + (++fxId), stops = function (vertical) {
+      var s = "";
+      RAINBOW.forEach(function (c, k) { s += '<stop offset="' + (k / 6) + '" stop-color="' + c + '"/><stop offset="' + ((k + 1) / 6) + '" stop-color="' + c + '"/>'; });
+      return s;
+    };
+    var cap = '<circle cx="100" cy="72" r="50"/><circle cx="58" cy="82" r="36"/><circle cx="142" cy="82" r="36"/>' +
+      '<circle cx="74" cy="46" r="33"/><circle cx="126" cy="46" r="33"/><circle cx="100" cy="36" r="36"/>' +
+      '<circle cx="40" cy="100" r="22"/><circle cx="160" cy="100" r="22"/>';
+    var stem = '<path d="M84 112 Q80 160 68 200 L132 200 Q120 160 116 112 Z"/>';
+    var base = '<circle cx="62" cy="202" r="22"/><circle cx="138" cy="202" r="22"/><circle cx="100" cy="208" r="26"/>';
+    return '<svg viewBox="0 0 200 240" width="100%" height="100%" overflow="visible"><defs>' +
+      '<linearGradient id="' + id + 'c" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="124">' + stops() + '</linearGradient>' +
+      '<linearGradient id="' + id + 's" gradientUnits="userSpaceOnUse" x1="70" y1="0" x2="130" y2="0">' + stops() + '</linearGradient></defs>' +
+      '<g fill="' + INK + '" stroke="' + INK + '" stroke-width="10" stroke-linejoin="round">' + stem + base + cap + '</g>' +
+      '<g fill="url(#' + id + 's)">' + stem + '</g><g fill="#f4efff">' + base + '</g><g fill="url(#' + id + 'c)">' + cap + '</g>' +
+      '<g fill="#fff" opacity="0.5"><ellipse cx="72" cy="38" rx="12" ry="7" transform="rotate(-25 72 38)"/><ellipse cx="50" cy="196" rx="8" ry="5"/></g>' +
+      '</svg>';
+  }
 
   function celebrate() {
     var r = $("eqbar").getBoundingClientRect();
     var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    var W = window.innerWidth, H = window.innerHeight, far = Math.max(W, H), small = Math.min(W, H);
+    var W = window.innerWidth, H = window.innerHeight, small = Math.min(W, H);
     var at = function (x, y) { return "translate(" + x + "px," + y + "px) translate(-50%,-50%) "; };
-    function piece(txt, size, cls) {
-      var p = document.createElement(txt ? "span" : "div");
-      p.className = "burst" + (cls ? " " + cls : "");
-      if (txt) { p.textContent = txt; p.style.fontSize = size + "px"; }
+    function place(html, w, h) {
+      var p = document.createElement("div");
+      p.className = "burst";
+      p.style.width = w + "px"; p.style.height = h + "px";
+      p.innerHTML = html;
       document.body.appendChild(p);
       return p;
     }
-    function go(n, frames, opts) { n.animate(frames, opts).onfinish = function () { n.remove(); }; }
-    function shower(x, y, count, pool, reach) {
+    function go(n, frames, opts) { // easing applies to each step between keyframes, so holds stay put
+      frames.forEach(function (f) { if (!f.easing) f.easing = opts.easing || "linear"; });
+      opts.easing = "linear";
+      n.animate(frames, opts).onfinish = function () { n.remove(); };
+    }
+    function shake(px, ms) {
+      $("app").animate([{ transform: "translate(0,0)" }, { transform: "translate(" + -px + "px," + px * 0.6 + "px) rotate(-0.6deg)" },
+        { transform: "translate(" + px * 0.8 + "px," + -px * 0.7 + "px) rotate(0.6deg)" }, { transform: "translate(" + -px * 0.4 + "px," + px * 0.3 + "px)" },
+        { transform: "translate(0,0)" }], { duration: ms, easing: "ease-out" });
+    }
+    function boom(word, x, y, size, hold) {
+      var b = place(boomSVG(word), size, size);
+      go(b, [{ transform: at(x, y) + "scale(0) rotate(-20deg)" }, { transform: at(x, y) + "scale(1.15) rotate(4deg)", offset: 0.18 },
+             { transform: at(x, y) + "scale(1) rotate(0deg)", offset: 0.28 }, { transform: at(x, y) + "scale(1.04) rotate(-2deg)", offset: 0.75 },
+             { transform: at(x, y) + "scale(0) rotate(10deg)" }], { duration: hold, easing: "ease-out" });
+    }
+    function confetti(x, y, count) {
       for (var i = 0; i < count; i++) {
-        var p = piece(rnd(pool), 36 + Math.random() * 80);
-        var a = Math.random() * Math.PI * 2, d = reach * (0.4 + Math.random() * 0.6);
-        var dx = Math.cos(a) * d, dy = Math.sin(a) * d - H * 0.12, spin = (Math.random() - 0.5) * 1080;
-        go(p, [
-          { transform: at(x, y) + "scale(0) rotate(0deg)" },
-          { transform: at(x + dx * 0.8, y + dy * 0.8) + "scale(1.5,0.7) rotate(" + spin * 0.3 + "deg)", offset: 0.3 },
-          { transform: at(x + dx, y + dy) + "scale(0.8,1.3) rotate(" + spin * 0.5 + "deg)", offset: 0.45 },
-          { transform: at(x + dx * 1.1, y + dy) + "scale(1) rotate(" + spin * 0.6 + "deg)", offset: 0.55 },
-          { transform: at(x + dx * 1.3, H + 150) + "scale(1) rotate(" + spin + "deg)" }
-        ], { duration: 1800 + Math.random() * 900, delay: Math.random() * 250, easing: "cubic-bezier(.2,.6,.5,1)", fill: "backwards" });
+        var w = small * 0.018, c = place("", w, w * 1.8);
+        c.classList.add("confetti");
+        c.style.background = RAINBOW[i % 6];
+        var a = Math.random() * Math.PI * 2, d = small * (0.25 + Math.random() * 0.3);
+        var dx = Math.cos(a) * d, dy = Math.sin(a) * d - small * 0.15, spin = (Math.random() - 0.5) * 900;
+        go(c, [{ transform: at(x, y) + "rotate(0deg)", opacity: 1 }, { transform: at(x + dx, y + dy) + "rotate(" + spin + "deg)", opacity: 1, offset: 0.35 },
+               { transform: at(x + dx * 1.2, y + dy + H * 0.45) + "rotate(" + spin * 2 + "deg)", opacity: 0 }],
+           { duration: 1300 + Math.random() * 400, easing: "cubic-bezier(.2,.7,.4,1)" });
       }
     }
+    var uw = small * 0.3, uh = uw * 186 / 236;
 
-    var acts = [
-      function bigUnicorn() { // pops up, boings, zooms off a corner
-        var n = piece("\u{1F984}", small * 0.45), d = Math.random() < 0.5 ? -1 : 1;
-        go(n, [
-          { transform: at(cx, cy) + "scale(0) rotate(0deg)" },
-          { transform: at(cx, cy) + "scale(1.35) rotate(" + (-12 * d) + "deg)", offset: 0.18 },
-          { transform: at(cx, cy) + "scale(0.9,1.1) rotate(" + (10 * d) + "deg)", offset: 0.28 },
-          { transform: at(cx, cy) + "scale(1.1,0.9) rotate(" + (-8 * d) + "deg)", offset: 0.38 },
-          { transform: at(cx, cy) + "scale(1) rotate(0deg)", offset: 0.5 },
-          { transform: at(cx + d * far * 1.2, cy - H * 0.5) + "scale(0.6) rotate(" + (40 * d) + "deg)" }
-        ], { duration: 1700, easing: "ease-in-out" });
+    var scenes = [
+      function leap() { // unicorn bursts out of a BOOM and leaps away on a rainbow
+        boom(rnd(["YAY!", "WOW!", "BOOM!"]), cx, cy, small * 0.34, 1000);
+        confetti(cx, cy, 16);
+        var d = Math.random() < 0.5 ? -1 : 1;
+        var rx = W * 0.33, ry = Math.max(small * 0.2, Math.min(cy * 0.62, small * 0.5)), ex = cx + d * rx;
+        var band = small * 0.032, dur = 1500, travel = 0.8;
+        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("class", "burst");
+        svg.setAttribute("width", W); svg.setAttribute("height", H);
+        svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+        var arc = function (k) {
+          var ax = rx + k * band, ay = ry + k * band;
+          return "M" + (ex - d * ax) + " " + cy + " A" + ax + " " + ay + " 0 0 " + (d > 0 ? 1 : 0) + " " + (ex + d * ax) + " " + cy;
+        };
+        var paths = [[arc(0), INK, band * 6 + 8]];
+        RAINBOW.forEach(function (c, k) { paths.push([arc(2.5 - k), c, band + 0.6]); });
+        paths.forEach(function (p) {
+          var e = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          e.setAttribute("d", p[0]); e.setAttribute("fill", "none"); e.setAttribute("stroke", p[1]); e.setAttribute("stroke-width", p[2]);
+          svg.appendChild(e);
+        });
+        document.body.appendChild(svg);
+        Array.prototype.forEach.call(svg.childNodes, function (e) {
+          var L = e.getTotalLength();
+          e.style.strokeDasharray = L + " " + L;
+          e.animate([{ strokeDashoffset: L }, { strokeDashoffset: 0 }], { duration: dur * travel, delay: dur * (1 - travel), easing: "linear", fill: "both" });
+        });
+        go(svg, [{ opacity: 1 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], { duration: dur + 500 });
+        var u = place(unicornSVG(), uw, uh), frames = [
+          { transform: at(cx, cy) + "scale(0)", offset: 0 },
+          { transform: at(cx, cy) + "scale(1.25)", offset: 0.1 },
+          { transform: at(cx, cy) + "scale(1)", offset: 1 - travel }
+        ];
+        for (var s = 1; s <= 16; s++) {
+          var f = s / 16 * Math.PI, x = ex - d * rx * Math.cos(f), y = cy - ry * Math.sin(f);
+          var vx = d * rx * Math.sin(f), vy = -ry * Math.cos(f);
+          var ang = d > 0 ? Math.atan2(vy, vx) : Math.atan2(-vy, -vx), deg = ang * 180 / Math.PI * 0.7;
+          frames.push({ transform: at(x, y) + "rotate(" + deg + "deg)" + (d > 0 ? "" : " scaleX(-1)"), offset: 1 - travel + travel * s / 16 });
+        }
+        frames[1].transform += d > 0 ? "" : " scaleX(-1)"; frames[2].transform += d > 0 ? "" : " scaleX(-1)"; frames[0].transform += d > 0 ? "" : " scaleX(-1)";
+        go(u, frames, { duration: dur, easing: "linear" });
+        shake(8, 350);
       },
-      function kaboom() { // white flash and a giant explosion
-        go(piece("", 0, "flash"), [{ opacity: 0.9 }, { opacity: 0 }], { duration: 400, easing: "ease-out" });
-        var n = piece("\u{1F4A5}", small * 0.6);
-        go(n, [
-          { transform: at(cx, cy) + "scale(0) rotate(-20deg)", opacity: 1 },
-          { transform: at(cx, cy) + "scale(1.4) rotate(10deg)", opacity: 1, offset: 0.25 },
-          { transform: at(cx, cy) + "scale(1.2) rotate(0deg)", opacity: 1, offset: 0.6 },
-          { transform: at(cx, cy) + "scale(2) rotate(0deg)", opacity: 0 }
-        ], { duration: 1100, easing: "ease-out" });
-      },
-      function rainbowRing() { // stripes blast outward
-        go(piece("", 0, "ring"), [
-          { transform: at(cx, cy) + "scale(0)", opacity: 1 },
-          { transform: at(cx, cy) + "scale(1)", opacity: 0.9, offset: 0.5 },
-          { transform: at(cx, cy) + "scale(1.6)", opacity: 0 }
-        ], { duration: 900, easing: "ease-out" });
-      },
-      function bigRainbow() { // a huge rainbow rises up and stretches across the screen
-        var n = piece("\u{1F308}", small * 0.5);
-        go(n, [
-          { transform: at(cx, H + small * 0.3) + "scale(0.5)" },
-          { transform: at(cx, cy) + "scale(" + (W / (small * 0.5)) + ",1.6)", offset: 0.35 },
-          { transform: at(cx, cy) + "scale(" + (W / (small * 0.5) * 0.9) + ",1.8)", offset: 0.7 },
-          { transform: at(cx, -small * 0.5) + "scale(1)" }
-        ], { duration: 1800, easing: "ease-in-out" });
-      },
-      function parade() { // a line of unicorns gallops across with rainbows behind
-        var d = Math.random() < 0.5 ? -1 : 1, y = cy + (Math.random() - 0.5) * H * 0.4;
+      function beam() { // a rainbow beam shoots up from the equation and paint splats everywhere
+        boom(rnd(["POW!", "ZAP!", "YES!"]), cx, cy, small * 0.26, 900);
+        var bw = Math.min(r.width * 0.6, small * 0.3), bh = cy, R = bw / 2, id = "fx" + (++fxId), stripes = "";
+        RAINBOW.forEach(function (c, k) { stripes += '<rect x="' + (k * bw / 6) + '" y="0" width="' + (bw / 6 + 0.5) + '" height="' + bh + '" fill="' + c + '"/>'; });
+        var shape = "M0 " + bh + " V" + R + " A" + R + " " + R + " 0 0 1 " + bw + " " + R + " V" + bh + " Z";
+        var b = place('<svg width="' + bw + '" height="' + bh + '" viewBox="0 0 ' + bw + " " + bh + '" overflow="visible"><defs><clipPath id="' + id + '"><path d="' + shape + '"/></clipPath></defs>' +
+          '<g clip-path="url(#' + id + ')">' + stripes + '</g><path d="' + shape + '" fill="none" stroke="' + INK + '" stroke-width="6" stroke-linejoin="round"/></svg>', bw, bh);
+        b.style.transformOrigin = "50% 100%";
+        go(b, [{ transform: "translate(" + (cx - bw / 2) + "px,0) scaleY(0)" }, { transform: "translate(" + (cx - bw / 2) + "px,0) scaleY(1.06)", offset: 0.2 },
+               { transform: "translate(" + (cx - bw / 2) + "px,0) scaleY(1)", offset: 0.3 }, { transform: "translate(" + (cx - bw / 2) + "px,0) scaleY(1)", offset: 0.8 },
+               { transform: "translate(" + (cx - bw / 2) + "px,0) scale(0,1)" }], { duration: 1500, easing: "ease-out" });
         for (var i = 0; i < 7; i++) {
-          var n = piece(i % 2 ? "\u{1F308}" : "\u{1F984}", small * 0.14);
-          var x0 = d > 0 ? -150 : W + 150, x1 = d > 0 ? W + 150 : -150, flip = d > 0 ? "scaleX(-1) " : "";
-          go(n, [
-            { transform: at(x0, y) + flip + "translateY(0)" },
-            { transform: at((x0 + x1) / 4, y) + flip + "translateY(-60px)", offset: 0.25 },
-            { transform: at((x0 + x1) / 2, y) + flip + "translateY(0)", offset: 0.5 },
-            { transform: at((x0 + x1) * 3 / 4, y) + flip + "translateY(-60px)", offset: 0.75 },
-            { transform: at(x1, y) + flip + "translateY(0)" }
-          ], { duration: 1600, delay: i * 120, easing: "linear", fill: "backwards" });
+          var sz = small * (0.13 + Math.random() * 0.1), x = W * (0.1 + 0.8 * (i + Math.random()) / 7), y = H * (0.08 + Math.random() * 0.45);
+          if (Math.abs(x - cx) < bw) x += (x < cx ? -1 : 1) * bw;
+          var sp = place(splatSVG(RAINBOW[(i + 1) % 6]), sz, sz), rot = Math.random() * 360;
+          go(sp, [{ transform: at(x, y) + "rotate(" + rot + "deg) scale(0)", opacity: 1 }, { transform: at(x, y) + "rotate(" + rot + "deg) scale(1.2)", offset: 0.12 },
+                  { transform: at(x, y) + "rotate(" + rot + "deg) scale(1)", offset: 0.2 }, { transform: at(x, y + 12) + "rotate(" + rot + "deg) scale(1)", opacity: 1, offset: 0.85 },
+                  { transform: at(x, y + 20) + "rotate(" + rot + "deg) scale(0.9)", opacity: 0 }],
+             { duration: 1700, delay: 200 + i * 70, easing: "ease-out", fill: "backwards" });
         }
+        var px = W - uw * 0.42, py = Math.min(H * 0.6, cy + small * 0.15);
+        var u = place(unicornSVG(), uw, uh);
+        go(u, [{ transform: at(W + uw, py) + "scaleX(-1) rotate(0deg)" }, { transform: at(px, py) + "scaleX(-1) rotate(-10deg)", offset: 0.2 },
+               { transform: at(px, py) + "scaleX(-1) rotate(8deg)", offset: 0.35 }, { transform: at(px, py) + "scaleX(-1) rotate(-6deg)", offset: 0.5 },
+               { transform: at(px, py) + "scaleX(-1) rotate(4deg)", offset: 0.75 }, { transform: at(W + uw, py) + "scaleX(-1) rotate(0deg)" }],
+           { duration: 1600, delay: 250, easing: POP, fill: "backwards" });
+        shake(6, 300);
       },
-      function fireworks() { // explosions pop at random spots around the screen
-        for (var k = 0; k < 4; k++) {
-          (function (k) {
-            setTimeout(function () {
-              var x = W * (0.15 + Math.random() * 0.7), y = H * (0.1 + Math.random() * 0.5);
-              var n = piece(rnd(["\u{1F4A5}", "\u{1F31F}", "\u{1F308}"]), small * 0.2);
-              go(n, [{ transform: at(x, y) + "scale(0)", opacity: 1 }, { transform: at(x, y) + "scale(1.5)", opacity: 1, offset: 0.4 },
-                     { transform: at(x, y) + "scale(2)", opacity: 0 }], { duration: 700, easing: "ease-out" });
-              shower(x, y, 8, FUN, far * 0.25);
-            }, k * 220);
-          })(k);
-        }
-      },
-      function rainbowBeam() { // a rainbow shoots straight up out of the equation with a splash
-        var n = piece("", 0, "beam");
-        n.style.width = Math.min(r.width, small * 0.5) + "px";
-        n.style.left = cx + "px"; n.style.top = "0px"; n.style.height = cy + "px";
-        go(n, [
-          { transform: "translateX(-50%) scaleY(0)", opacity: 1 },
-          { transform: "translateX(-50%) scaleY(1)", opacity: 1, offset: 0.25 },
-          { transform: "translateX(-50%) scaleY(1)", opacity: 1, offset: 0.75 },
-          { transform: "translateX(-50%) scaleY(1)", opacity: 0 }
-        ], { duration: 1600, easing: "ease-out" });
-        shower(cx, cy, 14, ["\u2728", "\u{1F4A6}", "\u{1F4AB}"], far * 0.2);
-      },
-      function shardBurst() { // spiky rainbow shards explode around a unicorn
-        var cols = ["#ff3b6b", "#ff8a1f", "#ffd21f", "#3fcf6a", "#2fa8ff", "#7a5cff", "#e04cff"];
-        for (var k = 0; k < 40; k++) {
-          var sh = piece("", 0, "shard"), ang = k * 9 + Math.random() * 6, len = small * (0.25 + Math.random() * 0.3);
-          sh.style.background = cols[k % cols.length];
-          sh.style.height = len + "px"; sh.style.width = (len * 0.22) + "px";
-          sh.style.left = cx + "px"; sh.style.top = cy + "px";
-          go(sh, [
-            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(0) scaleY(0)", opacity: 1 },
-            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(-" + len * 0.3 + "px) scaleY(1)", opacity: 1, offset: 0.35 },
-            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(-" + len * 1.6 + "px) scaleY(0.6)", opacity: 0 }
-          ], { duration: 1000 + Math.random() * 400, easing: "ease-out" });
-        }
-        var u = piece("\u{1F984}", small * 0.3);
-        go(u, [{ transform: at(cx, cy) + "scale(0)" }, { transform: at(cx, cy) + "scale(1.2)", offset: 0.3 },
-               { transform: at(cx, cy) + "scale(1)", offset: 0.75 }, { transform: at(cx, cy) + "scale(0)" }], { duration: 1400, easing: "ease-out" });
-      },
-      function fireworkUnicorn() { // the sky goes dark and a glowing unicorn bursts like fireworks
-        go(piece("", 0, "night"), [{ opacity: 0 }, { opacity: 0.85, offset: 0.15 }, { opacity: 0.85, offset: 0.7 }, { opacity: 0 }], { duration: 1900 });
-        var u = piece("\u{1F984}", small * 0.4, "glow");
-        go(u, [
-          { transform: at(cx, cy) + "scale(0.3)", opacity: 0, filter: "hue-rotate(0deg) brightness(1.4)" },
-          { transform: at(cx, cy) + "scale(1)", opacity: 1, offset: 0.2 },
-          { transform: at(cx, cy) + "scale(1.05)", opacity: 1, offset: 0.7, filter: "hue-rotate(300deg) brightness(1.4)" },
-          { transform: at(cx, cy) + "scale(1.3)", opacity: 0, filter: "hue-rotate(360deg) brightness(2)" }
-        ], { duration: 1900, easing: "ease-out" });
-        var cols = ["#ff5c8a", "#ffa53a", "#ffe14d", "#5ad17a", "#4fb3ff", "#9b6bff", "#fff"];
-        for (var k = 0; k < 36; k++) {
-          var st = piece("", 0, "streak"), ang = Math.random() * 360, len = small * (0.08 + Math.random() * 0.1);
-          st.style.background = "linear-gradient(to top, transparent, " + cols[k % cols.length] + ")";
-          st.style.height = len + "px"; st.style.left = cx + "px"; st.style.top = cy + "px";
-          go(st, [
-            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(0)", opacity: 0 },
-            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(-" + small * 0.2 + "px)", opacity: 1, offset: 0.3 },
-            { transform: "translate(-50%,-100%) rotate(" + ang + "deg) translateY(-" + small * 0.45 + "px)", opacity: 0 }
-          ], { duration: 1300, delay: 200 + Math.random() * 300, easing: "ease-out", fill: "backwards" });
-        }
-      },
-      function colorCloud() { // rainbow paint puffs bloom while a unicorn leaps through
-        var cols = ["#ff3b6b", "#ff8a1f", "#ffd21f", "#3fcf6a", "#2fa8ff", "#7a5cff", "#ff5cf0"];
-        for (var k = 0; k < 22; k++) {
-          var pf = piece("", 0, "puff"), sz = small * (0.15 + Math.random() * 0.25);
-          var x = cx + (Math.random() - 0.5) * W * 0.9, y = cy + (Math.random() - 0.5) * H * 0.6;
-          pf.style.background = cols[k % cols.length]; pf.style.width = pf.style.height = sz + "px";
-          go(pf, [{ transform: at(x, y) + "scale(0)", opacity: 0.9 }, { transform: at(x, y) + "scale(1.3)", opacity: 0.8, offset: 0.4 },
-                  { transform: at(x, y - 40) + "scale(1.8)", opacity: 0 }], { duration: 1500, delay: Math.random() * 300, easing: "ease-out", fill: "backwards" });
-        }
-        var d = Math.random() < 0.5 ? -1 : 1, x0 = d > 0 ? -small * 0.3 : W + small * 0.3, flip = d > 0 ? "scaleX(-1) " : "";
-        var u = piece("\u{1F984}", small * 0.35);
-        go(u, [{ transform: at(x0, H * 0.85) + flip + "rotate(0deg)" },
-               { transform: at(W / 2, H * 0.25) + flip + "rotate(-15deg)", offset: 0.5 },
-               { transform: at(W - x0, H * 0.85) + flip + "rotate(10deg)" }], { duration: 1600, easing: "ease-in-out" });
-      },
-      function rainbowKaboom() { // fiery blast with a rainbow arch over it and a unicorn in front
-        var arc = piece("", 0, "arch"), aw = Math.min(W * 0.9, small * 1.1);
-        arc.style.width = aw + "px"; arc.style.height = (aw / 2) + "px";
-        go(arc, [{ transform: at(cx, cy - aw * 0.1) + "scale(0)", opacity: 1 },
-                 { transform: at(cx, cy - aw * 0.1) + "scale(1)", opacity: 1, offset: 0.3 },
-                 { transform: at(cx, cy - aw * 0.1) + "scale(1)", opacity: 1, offset: 0.75 },
-                 { transform: at(cx, cy - aw * 0.1) + "scale(1.1)", opacity: 0 }], { duration: 1800, easing: "ease-out" });
-        var fb = piece("", 0, "fireball"), fs = small * 0.55;
-        fb.style.width = fb.style.height = fs + "px";
-        go(fb, [{ transform: at(cx, cy) + "scale(0)", opacity: 1 }, { transform: at(cx, cy) + "scale(1.2)", opacity: 1, offset: 0.25 },
-                { transform: at(cx, cy) + "scale(1)", opacity: 0.9, offset: 0.6 }, { transform: at(cx, cy) + "scale(1.5)", opacity: 0 }], { duration: 1500, easing: "ease-out" });
-        var u = piece("\u{1F984}", small * 0.25);
-        go(u, [{ transform: at(cx, cy) + "scale(0)" }, { transform: at(cx, cy) + "scale(1.3)", offset: 0.25 },
-               { transform: at(cx, cy) + "scale(1)", offset: 0.4 }, { transform: at(cx, cy) + "scale(1)", offset: 0.8 },
-               { transform: at(cx, cy) + "scale(0)" }], { duration: 1700, easing: "ease-out" });
-        shower(cx, cy, 10, ["\u{1F525}", "\u{1F4A5}", "\u2728"], far * 0.3);
-      },
-      function rainbowSpew() { // a silly unicorn hops in and sprays a rainbow that splats
-        var cols = ["#ff3b6b", "#ff8a1f", "#ffd21f", "#3fcf6a", "#2fa8ff", "#7a5cff"];
-        var us = small * 0.3, ux = W * 0.78, uy = H * 0.45;
-        var u = piece("\u{1F984}", us);
-        go(u, [{ transform: at(W + us, uy) + "rotate(0deg)" }, { transform: at(ux, uy - 40) + "rotate(-10deg)", offset: 0.12 },
-               { transform: at(ux, uy) + "rotate(8deg)", offset: 0.2 }, { transform: at(ux, uy) + "rotate(-6deg) scale(1.05,0.95)", offset: 0.5 },
-               { transform: at(ux, uy) + "rotate(6deg) scale(0.95,1.05)", offset: 0.8 }, { transform: at(W + us, uy) + "rotate(0deg)" }],
-           { duration: 2300, easing: "ease-in-out" });
-        var mx = ux - us * 0.35, my = uy + us * 0.1;
-        for (var k = 0; k < 30; k++) {
-          var b = piece("", 0, "blob"), c = cols[k % cols.length], bs = small * 0.05;
-          b.style.background = c; b.style.width = b.style.height = bs + "px";
-          var tx = W * (0.08 + Math.random() * 0.35), ty = H * (0.7 + Math.random() * 0.18);
-          var peak = Math.min(my, ty) - H * (0.15 + Math.random() * 0.1);
-          go(b, [{ transform: at(mx, my) + "scale(0.5)" }, { transform: at((mx + tx) / 2, peak) + "scale(1.2)", offset: 0.5 },
-                 { transform: at(tx, ty) + "scale(2.4,0.7)", offset: 0.85 }, { transform: at(tx, ty) + "scale(2.6,0.6)", opacity: 0 }],
-             { duration: 1300, delay: 350 + k * 35, easing: "linear", fill: "backwards" });
-        }
-      },
-      function zoomCrash() { // a unicorn streaks in with a rainbow trail and crashes into a puffy cloud
-        var d = Math.random() < 0.5 ? -1 : 1, sx = d > 0 ? -small * 0.2 : W + small * 0.2, sy = H * 0.05;
-        var ex = cx, ey = cy, flip = d > 0 ? "scaleX(-1) " : "";
-        var ang = Math.atan2(ey - sy, ex - sx) * 180 / Math.PI, len = Math.hypot(ex - sx, ey - sy);
-        var trail = piece("", 0, "trail");
-        trail.style.width = len + "px"; trail.style.height = small * 0.09 + "px";
-        trail.style.left = sx + "px"; trail.style.top = sy + "px";
-        go(trail, [{ transform: "translateY(-50%) rotate(" + ang + "deg) scaleX(0)", opacity: 1 },
-                   { transform: "translateY(-50%) rotate(" + ang + "deg) scaleX(1)", opacity: 1, offset: 0.25 },
-                   { transform: "translateY(-50%) rotate(" + ang + "deg) scaleX(1)", opacity: 0 }], { duration: 1500, easing: "ease-out" });
-        var u = piece("\u{1F984}", small * 0.18);
-        go(u, [{ transform: at(sx, sy) + flip }, { transform: at(ex, ey) + flip + "scale(1.2)", offset: 0.95 }, { transform: at(ex, ey) + flip + "scale(0)" }],
-           { duration: 400, easing: "ease-in" });
-        setTimeout(function () {
-          for (var k = 0; k < 16; k++) {
-            var pf = piece("", 0, "smoke"), sz = small * (0.12 + Math.random() * 0.16);
-            var a = Math.random() * Math.PI * 2, dd = small * (0.05 + Math.random() * 0.22);
-            var x = ex + Math.cos(a) * dd, y = ey + Math.sin(a) * dd * 0.7;
-            pf.style.width = pf.style.height = sz + "px";
-            go(pf, [{ transform: at(ex, ey) + "scale(0)", opacity: 1 }, { transform: at(x, y) + "scale(1)", opacity: 1, offset: 0.3 },
-                    { transform: at(x, y - 30) + "scale(1.3)", opacity: 1, offset: 0.7 }, { transform: at(x, y - 50) + "scale(1.5)", opacity: 0 }],
-               { duration: 1500, easing: "ease-out" });
-          }
-          var bang = piece("\u{1F4A5}", small * 0.3);
-          go(bang, [{ transform: at(ex, ey) + "scale(0)" }, { transform: at(ex, ey) + "scale(1.3)", offset: 0.3 }, { transform: at(ex, ey) + "scale(1.6)", opacity: 0 }],
-             { duration: 800, easing: "ease-out" });
-          shower(ex, ey, 10, ["\u2B50", "\u{1F4AB}", "\u{1F984}"], far * 0.3);
-        }, 380);
-      },
-      function rainbowBomb() { // atomic rainbow bomb: flash, shockwave, rainbow mushroom cloud
-        go(piece("", 0, "flash"), [{ opacity: 1 }, { opacity: 0 }], { duration: 600, easing: "ease-out" });
-        var gy = Math.min(H * 0.85, cy + small * 0.25);
-        var wave = piece("", 0, "wave");
-        go(wave, [{ transform: at(cx, gy) + "scale(0)", opacity: 1 }, { transform: at(cx, gy) + "scale(1)", opacity: 0 }], { duration: 1000, easing: "ease-out" });
-        var cols = ["#ff3b6b", "#ff8a1f", "#ffd21f", "#3fcf6a", "#2fa8ff", "#7a5cff"];
-        var top = Math.max(small * 0.25, gy - small * 0.7), stemW = small * 0.12;
-        for (var k = 0; k < 10; k++) { // stem of puffs climbing up
-          var y = gy - (gy - top) * (k / 10), st = piece("", 0, "puffsolid"), sz = stemW * (1 + Math.random() * 0.4);
-          st.style.width = st.style.height = sz + "px"; st.style.background = cols[k % cols.length];
-          go(st, [{ transform: at(cx, gy) + "scale(0.3)", opacity: 1 }, { transform: at(cx + (Math.random() - 0.5) * 20, y) + "scale(1)", opacity: 1, offset: 0.3 },
-                  { transform: at(cx, y - 20) + "scale(1.2)", opacity: 1, offset: 0.8 }, { transform: at(cx, y - 40) + "scale(1.3)", opacity: 0 }],
-             { duration: 2400, delay: 150 + k * 40, easing: "ease-out", fill: "backwards" });
-        }
-        for (var k = 0; k < 26; k++) { // mushroom cap in rainbow rings
-          var ring = k % 6, a = Math.random() * Math.PI * 2, rr = small * (0.06 + ring * 0.045);
-          var x = cx + Math.cos(a) * rr * 1.6, y = top + Math.sin(a) * rr * 0.7;
-          var cp = piece("", 0, "puffsolid"), sz = small * (0.12 + Math.random() * 0.08);
-          cp.style.width = cp.style.height = sz + "px"; cp.style.background = cols[ring];
-          go(cp, [{ transform: at(cx, gy) + "scale(0)", opacity: 1 }, { transform: at(x, y) + "scale(1)", opacity: 1, offset: 0.35 },
-                  { transform: at(x, y - 30) + "scale(1.25)", opacity: 1, offset: 0.8 }, { transform: at(x, y - 50) + "scale(1.4)", opacity: 0 }],
-             { duration: 2500, delay: 350 + Math.random() * 200, easing: "ease-out", fill: "backwards" });
-        }
-        var bang = piece("\u{1F4A5}", small * 0.35);
-        go(bang, [{ transform: at(cx, gy) + "scale(0)" }, { transform: at(cx, gy) + "scale(1.4)", offset: 0.3 }, { transform: at(cx, gy) + "scale(1.8)", opacity: 0 }],
-           { duration: 900, easing: "ease-out" });
-        $("app").animate([{ transform: "translate(0,0)" }, { transform: "translate(-22px,14px) rotate(-2deg)" }, { transform: "translate(20px,-16px) rotate(2deg)" },
-          { transform: "translate(-14px,10px)" }, { transform: "translate(10px,-6px)" }, { transform: "translate(0,0)" }], { duration: 700, delay: 100, easing: "ease-out" });
+      function kaboom() { // rainbow mushroom cloud, and the unicorn rides the blast into the sky
+        var fl = place("", W, H);
+        fl.classList.add("flash"); fl.style.opacity = 0;
+        go(fl, [{ opacity: 0.7 }, { opacity: 0 }], { duration: 250, easing: "ease-out" });
+        var gy = Math.min(H * 0.85, cy + small * 0.15), ch = Math.min(small * 0.55, (gy - small * 0.04) / 1.15), cw = ch * 200 / 240;
+        var ring = place('<svg viewBox="0 0 200 60" width="100%" height="100%" overflow="visible"><ellipse cx="100" cy="30" rx="96" ry="26" fill="none" stroke="' + INK + '" stroke-width="12"/>' +
+          '<ellipse cx="100" cy="30" rx="96" ry="26" fill="none" stroke="#fff" stroke-width="6"/></svg>', small * 0.9, small * 0.27);
+        go(ring, [{ transform: at(cx, gy) + "scale(0.1)", opacity: 1 }, { transform: at(cx, gy) + "scale(1.5)", opacity: 0 }], { duration: 800, easing: "ease-out" });
+        var c = place(cloudSVG(), cw, ch);
+        c.style.transformOrigin = "50% 100%";
+        go(c, [{ transform: at(cx, gy - ch / 2) + "scale(0.2,0)" }, { transform: at(cx, gy - ch / 2) + "scale(1.08,1.12)", offset: 0.22 },
+               { transform: at(cx, gy - ch / 2) + "scale(0.97,0.95)", offset: 0.32 }, { transform: at(cx, gy - ch / 2) + "scale(1)", offset: 0.42 },
+               { transform: at(cx, gy - ch / 2) + "scale(1.04)", opacity: 1, offset: 0.8 }, { transform: at(cx, gy - ch / 2 - 30) + "scale(1.1)", opacity: 0 }],
+           { duration: 1900, easing: "ease-out" });
+        boom("KABOOM!", cx, gy, small * 0.32, 1000);
+        var d = Math.random() < 0.5 ? -1 : 1, top = gy - ch * 0.9, flip = d > 0 ? "" : " scaleX(-1)";
+        var u = place(unicornSVG(), uw * 0.85, uh * 0.85);
+        go(u, [{ transform: at(cx, top) + "scale(0) rotate(0deg)" + flip }, { transform: at(cx, top - small * 0.05) + "scale(1.2) rotate(" + -15 * d + "deg)" + flip, offset: 0.25 },
+               { transform: at(cx + d * W * 0.25, top - small * 0.22) + "scale(1) rotate(" + -25 * d + "deg)" + flip, offset: 0.55 },
+               { transform: at(cx + d * W * 0.7, -uh) + "scale(0.9) rotate(" + -40 * d + "deg)" + flip }],
+           { duration: 1300, delay: 450, easing: "cubic-bezier(.3,.5,.6,1)", fill: "backwards" });
+        confetti(cx, top + ch * 0.2, 14);
+        shake(14, 550);
       }
     ];
-
-    // Two different random acts each time, plus the shower and a shake.
-    var i = Math.floor(Math.random() * acts.length), j = (i + 1 + Math.floor(Math.random() * (acts.length - 1))) % acts.length;
-    acts[i](); acts[j]();
-    shower(cx, cy, 36, FUN, far * 0.8);
-    $("app").animate([
-      { transform: "translate(0,0)" }, { transform: "translate(-14px,8px) rotate(-1deg)" },
-      { transform: "translate(12px,-10px) rotate(1deg)" }, { transform: "translate(-8px,6px)" },
-      { transform: "translate(6px,-4px)" }, { transform: "translate(0,0)" }
-    ], { duration: 450, easing: "ease-out" });
+    var n = Math.floor(Math.random() * (scenes.length - 1));
+    if (n >= lastScene && lastScene >= 0) n++;
+    if (n >= scenes.length) n = 0;
+    lastScene = n;
+    scenes[n]();
   }
 
   function fillList(ul, found, live) {
