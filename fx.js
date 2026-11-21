@@ -22,8 +22,8 @@
   document.head.appendChild(style);
 
   var RAINBOW = ["#ff4f7b", "#ff9a3c", "#f5c400", "#3dbb6a", "#3fa9f5", "#8e6cf0"];
-  var FX = { keep: false, actions: ["Wave", "Rainbow colors", "Spin explosion", "Unicorn backs", "Unicorn tile", "Boom", "Rainbow slide",
-    "Rainbow melt", "Unicorn egg", "Rocket tower", "Balloon", "Googly stampede", "Rainbow sneeze", "Rainbow poop"], RAINBOW: RAINBOW };
+  var FX = { keep: false, actions: ["Leapfrog", "Disco", "Shatter", "Unicorn backs", "Unicorn tile", "Boom", "Rainbow slide",
+    "Rainbow melt", "Unicorn egg", "Rocket tower", "Balloon", "Googly stampede", "Rainbow sneeze", "Rainbow poop", "Atomic rainbow bomb"], RAINBOW: RAINBOW };
   var last = -1;
 
   // ---- Scattering number tiles in the tray ----
@@ -219,78 +219,186 @@
   ];
 
   var actions = [
-    function wave(items) { // tiles hop one after another, then hop home
-      items.forEach(function (it, k) {
-        var h = it.el.offsetHeight || 60, x = it.sx, y = it.sy;
-        var f = [
-          { offset: 0, transform: T(x, y), easing: "ease-out" },
-          { offset: 0.08, transform: T(x, y, { sx: 1.15, sy: 0.85 }), easing: UP },
-          { offset: 0.26, transform: T(x, y - h * 1.3, { sx: 0.92, sy: 1.1 }), easing: DOWN },
-          { offset: 0.42, transform: T(x, y, { sx: 1.15, sy: 0.85 }), easing: POP },
-          { offset: 0.5, transform: T(x, y), easing: UP }
-        ];
-        run(it, home(f, 0.5, x, y, it), 1300, k * 90);
+    function leapfrog(items) { // tiles leapfrog down the line leaving rainbow arcs; the front one does a giant triple flip and they all bounce home
+      var n = items.length, h = items[0].el.offsetHeight || 60, W = window.innerWidth, gy = 0;
+      items.forEach(function (it) { gy += it.sy / n; });
+      var s = (items[n - 1].sx - items[0].sx) / Math.max(1, n - 1), d = (W - items[n - 1].sx) >= items[0].sx ? 1 : -1;
+      var order = d > 0 ? items.slice() : items.slice().reverse(), front = order[n - 1].sx; // order[0] is the back of the line
+      var room = d > 0 ? W - h * 0.6 - front : front - h * 0.6, sp = Math.max(h * 0.3, Math.min(s, room / Math.max(1, n - 2)));
+      var STEP = 300, CR = 90, LD = 430, GL = 760, g = n - 2;
+      var A = g * STEP + CR + LD + 100, T1 = A + 120, T2 = T1 + 120 + GL, D = T2 + 650;
+      order.forEach(function (it, i) {
+        var cx = it.sx, cy = it.sy, cr = 0, f = [{ offset: 0, transform: T(cx, cy) }];
+        function push(t, X, Y, o, e) { o = o || {}; if (o.r == null) o.r = cr; f.push({ offset: t / D, transform: T(X, Y, o), easing: e || "linear" }); }
+        for (var j = 0; j <= g; j++) {
+          if (j === i) { // my leap, over everyone in front of me
+            var t0 = i * STEP, Lx = front + d * (i + 1) * sp, Ly = gy, H = h * (1.2 + 0.5 * i), pts = [[cx, cy]];
+            push(t0, cx, cy); push(t0 + CR, cx, cy, { sx: 1.15, sy: 0.85 });
+            for (var q = 1; q <= 12; q++) {
+              var t = q / 12, X = cx + (Lx - cx) * t, Y = cy + (Ly - cy) * t - 4 * H * t * (1 - t);
+              pts.push([X, Y]);
+              push(t0 + CR + LD * t, X, Y, q === 12 ? { r: d * 360, sx: 1.15, sy: 0.85 } : { r: d * 360 * t }, q === 12 ? POP : null);
+            }
+            cx = Lx; cy = Ly; cr = d * 360;
+            push(t0 + CR + LD + 100, cx, cy);
+            var rb = rainbowAlong(pts, h * 0.055);
+            reveal(rb, LD, t0 + CR);
+            anim(rb.svg, [{ offset: 0, opacity: 1 }, { offset: (t0 + CR + LD + 250) / D, opacity: 1 }, { offset: (t0 + CR + LD + 650) / D, opacity: 0 }, { offset: 1, opacity: 0 }], D, 0, rb.svg);
+          } else if (!(i <= g && Math.abs(j - i) === 1)) { // duck while someone leaps over me
+            var m = j * STEP + CR + LD / 2;
+            push(m - 70, cx, cy); push(m, cx, cy, { sx: 1.12, sy: 0.84 }, POP); push(m + 90, cx, cy);
+          }
+        }
+        if (i === g) { // the giant triple flip
+          var up = Math.min(h * 3.5, cy - h * 0.6);
+          push(T1, cx, cy); push(T1 + 120, cx, cy, { sx: 1.2, sy: 0.75 }, UP);
+          push(T1 + 120 + GL / 2, cx, cy - up, { r: cr + d * 540, sx: 0.9, sy: 1.1 }, DOWN);
+          push(T2, cx, cy, { r: cr + d * 1080, sx: 1.2, sy: 0.8 }, UP);
+          cr += d * 1080;
+          for (var k = 0; k < 8; k++) { // sparks fly from the landing
+            var sk = extra("div", "spark"), a = Math.PI * (1 + k / 7), sz = h * 0.15;
+            sk.style.width = sk.style.height = sz + "px"; sk.style.background = RAINBOW[k % 6];
+            var x1 = cx + Math.cos(a) * h * 0.5, y1 = cy + h * 0.4, x2 = cx + Math.cos(a) * h * 1.6, y2 = cy + h * 0.4 + Math.sin(a) * h * 0.9;
+            anim(sk, [{ offset: 0, transform: at(x1, y1) + "scale(0) rotate(0deg)" }, { offset: T2 / D, transform: at(x1, y1) + "scale(0) rotate(0deg)", easing: UP },
+                      { offset: (T2 + 300) / D, transform: at(x2, y2) + "scale(1) rotate(180deg)", easing: "ease-in" },
+                      { offset: (T2 + 520) / D, transform: at(x2, y2 + h * 0.3) + "scale(0) rotate(270deg)" }, { offset: 1, transform: at(x2, y2 + h * 0.3) + "scale(0) rotate(270deg)" }], D, 0, sk);
+          }
+        } else {
+          push(T2 - 90, cx, cy); push(T2, cx, cy, { sx: 1.15, sy: 0.85 }, UP);
+        }
+        run(it, home(f, T2 / D, cx, cy, it, { fromR: cr, spin: cr }), D, 0);
       });
+      return { delay: T2, px: 10 };
     },
-    function rainbow(items) { // each tile turns a rainbow color with a wiggle, then slides home
+    function disco(items) { // tiles spin faster and faster flashing rainbow colors, throw off sparkles, and pop into confetti
+      var D = 1900, PT = 0.55;
       items.forEach(function (it, k) {
-        var x = it.sx, y = it.sy, cs = getComputedStyle(it.el), bg = cs.backgroundColor, fg = cs.color, c = RAINBOW[k % RAINBOW.length];
-        var f = [
-          { offset: 0, transform: T(x, y), backgroundColor: bg, color: fg, easing: POP },
-          { offset: 0.12, transform: T(x, y, { r: -12, sx: 1.18, sy: 1.18 }), backgroundColor: c, color: "#fff" },
-          { offset: 0.24, transform: T(x, y, { r: 10, sx: 1.18, sy: 1.18 }) },
-          { offset: 0.36, transform: T(x, y, { r: -6, sx: 1.12, sy: 1.12 }) },
-          { offset: 0.46, transform: T(x, y, { r: 0, sx: 1.1, sy: 1.1 }), backgroundColor: c, color: "#fff", easing: UP }
-        ];
-        f.push({ offset: 0.5, transform: T(x, y, { sx: 1.1, sy: 1.1 }), backgroundColor: c, color: "#fff", easing: UP });
-        home(f, 0.5, x, y, it);
-        var n = f.length; // fade back to the tile's own colors during the trip home
-        f[n - 3].backgroundColor = c; f[n - 3].color = "#fff";
-        f[n - 2].backgroundColor = bg; f[n - 2].color = fg;
-        f[n - 1].backgroundColor = bg; f[n - 1].color = fg;
-        run(it, f, 1500, k * 110);
+        var h = it.el.offsetHeight || 60, x = it.sx, y = it.sy, cs = getComputedStyle(it.el), bg = cs.backgroundColor, fg = cs.color, c = RAINBOW[k % 6], dl = k * 90;
+        var py = y - h * 0.25, f = [];
+        for (var q = 0; q <= 12; q++) { var t = q / 12; f.push({ offset: PT * t, transform: T(x, y - h * 0.25 * t, { r: 1440 * t * t, sx: 1 + 0.35 * t, sy: 1 + 0.35 * t }) }); }
+        f.push({ offset: PT + 0.03, transform: T(x, py, { r: 1440, sx: 1.6, sy: 1.6 }), easing: "ease-in" });
+        f.push({ offset: PT + 0.07, transform: T(x, py, { r: 1440, sx: 0.85, sy: 0.85 }), easing: POP });
+        f.push({ offset: PT + 0.11, transform: T(x, py, { r: 1440 }), easing: UP });
+        run(it, home(f, PT + 0.11, x, py, it, { fromR: 1440, spin: 1440 }), D, dl);
+        // the colors: flashing faster and faster, a white flash at the pop, then back to its own
+        var cf = [{ offset: 0, backgroundColor: bg, color: fg, easing: "steps(1,end)" }];
+        for (q = 1; q <= 11; q++) cf.push({ offset: PT * Math.sqrt(q / 12), backgroundColor: RAINBOW[(q + k) % 6], color: "#fff", easing: "steps(1,end)" });
+        cf.push({ offset: PT, backgroundColor: "#fff", color: c, easing: "steps(1,end)" });
+        cf.push({ offset: PT + 0.07, backgroundColor: c, color: "#fff" });
+        cf.push({ offset: 0.88, backgroundColor: bg, color: fg }); cf.push({ offset: 1, backgroundColor: bg, color: fg });
+        anim(it.el, cf, D, dl);
+        // sparkles thrown off the spinning corners
+        for (var s = 0; s < 10; s++) {
+          var ts = 0.15 + 0.038 * s, u = ts / PT, ang = (1440 * u * u + 45 + 90 * (s % 4)) * Math.PI / 180, r0 = h * 0.7 * (1 + 0.35 * u);
+          var x0 = x + Math.cos(ang) * r0, y0 = y - h * 0.25 * u + Math.sin(ang) * r0, x1 = x0 + Math.cos(ang + 0.6) * h * 1.4, y1 = y0 + Math.sin(ang + 0.6) * h * 1.4;
+          var sp = extra("div", "spark");
+          sp.style.width = sp.style.height = h * 0.14 + "px"; sp.style.background = RAINBOW[(s + k) % 6];
+          anim(sp, [{ offset: 0, transform: at(x0, y0) + "scale(0) rotate(0deg)" }, { offset: ts, transform: at(x0, y0) + "scale(0) rotate(0deg)", easing: UP },
+                    { offset: ts + 0.03, transform: at(x0, y0) + "scale(1) rotate(45deg)" }, { offset: ts + 0.18, transform: at(x1, y1) + "scale(0) rotate(270deg)" },
+                    { offset: 1, transform: at(x1, y1) + "scale(0) rotate(270deg)" }], D, dl, sp);
+        }
+        // confetti when it pops
+        for (s = 0; s < 14; s++) {
+          var a = Math.PI * 2 * s / 14 + Math.random() * 0.3, dist = h * (1.3 + Math.random() * 0.9), cc = extra("div", "spark"), r1 = Math.random() * 360;
+          cc.style.width = cc.style.height = h * 0.13 + "px"; cc.style.background = RAINBOW[s % 6];
+          var mx = x + Math.cos(a) * dist * 0.75, my = py + Math.sin(a) * dist * 0.75 - h * 0.3, ex = x + Math.cos(a) * dist, ey = py + Math.sin(a) * dist + h * 0.9;
+          anim(cc, [{ offset: 0, transform: at(x, py) + "scale(0) rotate(0deg)", opacity: 1 }, { offset: PT, transform: at(x, py) + "scale(0) rotate(0deg)", opacity: 1, easing: UP },
+                    { offset: PT + 0.12, transform: at(mx, my) + "scale(1) rotate(" + r1 + "deg)", opacity: 1, easing: "ease-in" },
+                    { offset: PT + 0.32, transform: at(ex, ey) + "scale(0.4) rotate(" + (r1 + 300) + "deg)", opacity: 0 },
+                    { offset: 1, transform: at(ex, ey) + "scale(0.4) rotate(" + (r1 + 300) + "deg)", opacity: 0 }], D, dl, cc);
+        }
       });
+      return { delay: 1900 * PT, px: 8 };
     },
-    function explosion(items) { // tiles blast apart, spinning, then fall back into the tray
-      var gx = 0, gy = 0, small = Math.min(window.innerWidth, window.innerHeight);
-      items.forEach(function (it) { gx += it.sx / items.length; gy += it.sy / items.length; });
+    function shatter(items) { // tiles shake, crack into four pieces that fly apart, then snap back together and fly home
+      var D = 2200, CRACK = 0.2, OUT = 0.36, HANG = 0.46, SNAP = 0.6, gx = 0;
+      items.forEach(function (it) { gx += it.sx / items.length; });
+      function rnd(a) { return (Math.random() - 0.5) * a; }
       items.forEach(function (it) {
-        var dx = it.sx - gx + (Math.random() - 0.5) * 40, dy = it.sy - gy - 60 + (Math.random() - 0.5) * 40;
-        var len = Math.hypot(dx, dy) || 1, d = small * (0.2 + Math.random() * 0.12);
-        var ox = it.sx + dx / len * d, oy = it.sy + dy / len * d * 0.8 - small * 0.06;
-        var spin = (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 270);
-        var f = [
-          { offset: 0, transform: T(it.sx, it.sy), easing: POP },
-          { offset: 0.08, transform: T(it.sx, it.sy, { sx: 1.25, sy: 1.25 }), easing: "cubic-bezier(.1,.9,.3,1)" },
-          { offset: 0.42, transform: T(ox, oy, { r: spin }), easing: UP }
-        ];
-        run(it, home(f, 0.42, ox, oy, it, { fromR: spin, spin: spin > 0 ? 720 : -720 }), 1600, 0);
+        var h = it.el.offsetHeight || 60, x = it.sx, y = it.sy, Rx = x, Ry = y - h * 0.4;
+        var f = [{ offset: 0, transform: T(x, y), opacity: 1 }];
+        for (var q = 1; q <= 8; q++) { var t = q / 9, amp = 5 * t; f.push({ offset: CRACK * t, transform: T(x + (q % 2 ? amp : -amp), y + (q % 3 ? -amp : amp) * 0.5, { r: (q % 2 ? 4 : -4) * t }), opacity: 1 }); }
+        f.push({ offset: CRACK - 0.001, transform: T(x, y), opacity: 1 }, { offset: CRACK, transform: T(x, y), opacity: 0 }, { offset: SNAP, transform: T(Rx, Ry), opacity: 0 },
+               { offset: SNAP + 0.001, transform: T(Rx, Ry, { sx: 1.15, sy: 0.87 }), opacity: 1, easing: POP }, { offset: SNAP + 0.05, transform: T(Rx, Ry), opacity: 1, easing: UP });
+        home(f, SNAP + 0.05, Rx, Ry, it);
+        f.forEach(function (fr) { if (fr.opacity == null) fr.opacity = 1; });
+        run(it, f, D, 0);
+        // four jagged pieces
+        var C = [50 + rnd(16), 50 + rnd(16)], Mt = [50 + rnd(20), 0], Mb = [50 + rnd(20), 100], Ml = [0, 50 + rnd(20)], Mr = [100, 50 + rnd(20)];
+        function mid(p, k) { return [(p[0] + C[0]) / 2 + (k ? rnd(14) : 0), (p[1] + C[1]) / 2 + (k ? 0 : rnd(14))]; }
+        var Kt = mid(Mt, 1), Kb = mid(Mb, 1), Kl = mid(Ml, 0), Kr = mid(Mr, 0);
+        [[[[0, 0], Mt, Kt, C, Kl, Ml], [-1, -1], "25% 25%"], [[Mt, [100, 0], Mr, Kr, C, Kt], [1, -1], "75% 25%"],
+         [[C, Kr, Mr, [100, 100], Mb, Kb], [1, 1], "75% 75%"], [[Ml, Kl, C, Kb, Mb, [0, 100]], [-1, 1], "25% 75%"]].forEach(function (pc) {
+          var p = it.el.cloneNode(true), poly = "polygon(" + pc[0].map(function (a) { return a[0].toFixed(1) + "% " + a[1].toFixed(1) + "%"; }).join(",") + ")";
+          p.style.transform = ""; p.style.clipPath = p.style.webkitClipPath = poly; p.style.transformOrigin = pc[2];
+          document.body.appendChild(p);
+          var vx = pc[1][0] + (x - gx) / (h * 2), vy = pc[1][1] - 0.6, L = Math.hypot(vx, vy) || 1, dist = h * (1.3 + Math.random() * 0.7);
+          vx /= L; vy /= L;
+          var spin = (Math.random() < 0.5 ? -1 : 1) * (200 + Math.random() * 250);
+          anim(p, [{ offset: 0, transform: T(x, y), opacity: 0 }, { offset: CRACK - 0.001, transform: T(x, y), opacity: 0 },
+                   { offset: CRACK, transform: T(x, y), opacity: 1, easing: "cubic-bezier(.1,.9,.3,1)" },
+                   { offset: OUT, transform: T(x + vx * dist, y + vy * dist, { r: spin }), opacity: 1 },
+                   { offset: HANG, transform: T(x + vx * dist * 1.12, y + vy * dist * 1.12, { r: spin * 1.15 }), opacity: 1, easing: "cubic-bezier(.7,0,.9,.6)" },
+                   { offset: SNAP, transform: T(Rx, Ry), opacity: 1 }, { offset: SNAP + 0.001, transform: T(Rx, Ry), opacity: 0 }, { offset: 1, transform: T(Rx, Ry), opacity: 0 }], D, 0, p);
+        });
+        for (var s = 0; s < 6; s++) { // a ring of sparks when it snaps back together
+          var sk = extra("div", "spark"), a = Math.PI * 2 * s / 6 + 0.3, sz = h * 0.14;
+          sk.style.width = sk.style.height = sz + "px"; sk.style.background = RAINBOW[s];
+          var x1 = Rx + Math.cos(a) * h * 0.5, y1 = Ry + Math.sin(a) * h * 0.5, x2 = Rx + Math.cos(a) * h * 1.3, y2 = Ry + Math.sin(a) * h * 1.3;
+          anim(sk, [{ offset: 0, transform: at(x1, y1) + "scale(0)" }, { offset: SNAP, transform: at(x1, y1) + "scale(0)", easing: UP },
+                    { offset: SNAP + 0.1, transform: at(x2, y2) + "scale(1)", easing: "ease-in" }, { offset: SNAP + 0.18, transform: at(x2, y2) + "scale(0)" },
+                    { offset: 1, transform: at(x2, y2) + "scale(0)" }], D, 0, sk);
+        }
       });
+      return { delay: D * CRACK, px: 12 };
     },
-    function unicornBacks(items) { // tiles flip over to show a picture on the back, flip back, and tumble home
+    function unicornBacks(items) { // tiles flip like dominoes; the pictures on their backs pop out, then they flip back and spin home
+      var D = 2600;
       items.forEach(function (it, k) {
-        var h = it.el.offsetHeight || 60, x = it.sx, y = it.sy, el = it.el;
-        // Turn the tile into a two-sided card: its own face in front, a picture behind.
+        var h = it.el.offsetHeight || 60, x = it.sx, y = it.sy, el = it.el, kind = k % BACKS.length;
+        // Turn the tile into a two-sided card: its own face in front, a picture behind,
+        // and a copy of the picture (without its background) that can pop out past the edges.
         var front = el.cloneNode(true);
         front.classList.remove("actor");
         front.classList.add("face");
         front.removeAttribute("style");
         var back = document.createElement("div");
         back.className = "ttile face back";
-        back.innerHTML = BACKS[k % BACKS.length];
+        back.innerHTML = BACKS[kind];
+        var pop = document.createElement("div"), inner = document.createElement("div");
+        pop.className = "face back";
+        pop.style.cssText = "overflow:visible;background:none;box-shadow:none;transform:rotateY(180deg) translateZ(1px)";
+        inner.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%";
+        inner.innerHTML = BACKS[kind].replace(/<rect[^>]*\/>/, "");
+        pop.appendChild(inner);
         el.textContent = "";
         el.classList.add("card3d");
-        el.appendChild(front); el.appendChild(back);
+        el.appendChild(front); el.appendChild(back); el.appendChild(pop);
         var f = [
           { offset: 0, transform: T(x, y), easing: UP },
-          { offset: 0.08, transform: T(x, y - h * 0.3, { sx: 1.1, sy: 1.1 }), easing: "ease-in-out" },
-          { offset: 0.24, transform: T(x, y - h * 0.3, { f: 180, sx: 1.15, sy: 1.15 }), easing: "ease-in-out" },
-          { offset: 0.32, transform: T(x, y - h * 0.3, { f: 180, r: -8, sx: 1.15, sy: 1.15 }), easing: "ease-in-out" },
-          { offset: 0.4, transform: T(x, y - h * 0.3, { f: 180, r: 8, sx: 1.15, sy: 1.15 }), easing: "ease-in-out" },
-          { offset: 0.46, transform: T(x, y - h * 0.3, { f: 180, sx: 1.15, sy: 1.15 }), easing: "ease-in-out" },
-          { offset: 0.6, transform: T(x, y - h * 0.3, { f: 360, sx: 1.1, sy: 1.1 }), easing: UP }
+          { offset: 0.06, transform: T(x, y - h * 0.3, { sx: 1.1, sy: 1.1 }), easing: "ease-in-out" },
+          { offset: 0.2, transform: T(x, y - h * 0.3, { f: 180, sx: 1.15, sy: 1.15 }) },
+          { offset: 0.52, transform: T(x, y - h * 0.3, { f: 180, sx: 1.15, sy: 1.15 }), easing: "ease-in-out" },
+          { offset: 0.62, transform: T(x, y - h * 0.3, { f: 360, sx: 1.1, sy: 1.1 }), easing: UP }
         ];
-        run(it, home(f, 0.6, x, y - h * 0.3, it, { f: 360, spin: 360 }), 1800, k * 120);
+        run(it, home(f, 0.62, x, y - h * 0.3, it, { f: 720, spin: 360 }), D, k * 120);
+        function P(ty, r, sx, sy, e) { return { transform: "translate(0px," + ty + "px) rotate(" + r + "deg) scale(" + sx + "," + (sy == null ? sx : sy) + ")", easing: e }; }
+        var pf;
+        if (kind === 0) { // the unicorn's head pokes out of the top and nods
+          inner.style.transformOrigin = "50% 100%";
+          pf = [[0, P(0, 0, 1)], [0.22, P(0, 0, 1, 1, POP)], [0.3, P(-h * 0.45, 0, 1.35, 1.35, "ease-in-out")], [0.34, P(-h * 0.45, -12, 1.35, 1.35, "ease-in-out")],
+                [0.38, P(-h * 0.45, 12, 1.35, 1.35, "ease-in-out")], [0.42, P(-h * 0.45, -12, 1.35, 1.35, "ease-in-out")], [0.46, P(-h * 0.45, 0, 1.35, 1.35, "ease-in")],
+                [0.52, P(0, 0, 1)], [1, P(0, 0, 1)]];
+        } else if (kind === 1) { // the rainbow stretches out past the edges
+          inner.style.transformOrigin = "50% 72%";
+          pf = [[0, P(0, 0, 1)], [0.22, P(0, 0, 1, 1, POP)], [0.32, P(0, 0, 1.9, 1.6, "ease-in-out")], [0.37, P(0, 0, 1.7, 1.45, "ease-in-out")],
+                [0.42, P(0, 0, 1.9, 1.6, "ease-in")], [0.5, P(0, 0, 1)], [1, P(0, 0, 1)]];
+        } else { // the star spins up out of the tile and back
+          inner.style.transformOrigin = "50% 50%";
+          pf = [[0, P(0, 0, 1)], [0.22, P(0, 0, 1, 1, UP)], [0.32, P(-h * 0.7, 360, 1.5, 1.5, "ease-in-out")], [0.42, P(-h * 0.7, 720, 1.5, 1.5, "ease-in")],
+                [0.52, P(0, 1080, 1)], [1, P(0, 1080, 1)]];
+        }
+        anim(inner, pf.map(function (p) { p[1].offset = p[0]; return p[1]; }), D, k * 120);
       });
     },
     function unicornTile(items) { // the left tile grows into a unicorn and gallops home on a rainbow; the rest follow it
@@ -758,17 +866,104 @@
         run(it, home(g, l, pxc, topY, it, { fromR: -360, spin: -360 }), D, 0);
       });
       return { delay: D * PLOP, px: 10 };
+    },
+    function atomicBomb(items) { // an operator tile grows fins, drops, and goes off: a white flash and a rainbow mushroom cloud that carries the tiles up
+      var D = 4400, n = items.length, h = items[0].el.offsetHeight || 60, W = window.innerWidth, Hs = window.innerHeight, gy = 0;
+      items.forEach(function (it) { gy += it.sy / n; });
+      var b = items.filter(function (it) { return /\b(add|mul)\b/.test(it.el.className); })[0] || items[Math.floor(n / 2)];
+      var r = h * 0.42, gap = h * 0.6, capW = Math.max(h * 4.2, n * h * 1.15 + h * 0.6);
+      var ix = capW + h > W ? W / 2 : Math.min(W - capW / 2 - h * 0.5, Math.max(capW / 2 + h * 0.5, b.sx));
+      var capY = Math.max(h * 2.7, gy - h * 0.3), floorY = Math.min(Hs - h * 0.6, capY + h * 3.8), topY = Math.max(h * 1.2, gy - h * 1.8);
+      var LIFT = 0.1, TOP = 0.24, DROP = 0.32, HIT = 0.4, RISE = 0.54, PUFF = 0.8;
+      // fins and a lit fuse grow out of the bomb tile
+      var w = b.el.offsetWidth || h, deco = document.createElement("div"), sz = h * 0.2;
+      deco.className = "deco";
+      deco.innerHTML = '<svg viewBox="0 0 100 50" preserveAspectRatio="none" style="position:absolute;left:0;top:' + (-h * 0.45) + 'px;width:' + w + 'px;height:' + (h * 0.5) +
+        'px;overflow:visible;filter:' + SHADOW + '"><path d="M50 50 C38 36 62 26 50 12" stroke="#b08a5a" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+        '<path d="M6 52 L2 4 L36 52 Z" fill="' + RAINBOW[5] + '"/><path d="M94 52 L98 4 L64 52 Z" fill="' + RAINBOW[5] + '"/></svg>' +
+        '<div class="spark" style="position:absolute;left:' + (w * 0.5 - sz / 2) + 'px;top:' + (-h * 0.39 - sz / 2) + 'px;width:' + sz + 'px;height:' + sz + 'px;background:' + RAINBOW[2] + '"></div>';
+      b.el.appendChild(deco);
+      anim(deco, [{ offset: 0, transform: "scale(0)" }, { offset: 0.06, transform: "scale(1.15)", easing: POP }, { offset: 0.09, transform: "scale(1)" },
+                  { offset: HIT - 0.003, transform: "scale(1)" }, { offset: HIT, transform: "scale(0)" }, { offset: 1, transform: "scale(0)" }], D);
+      anim(deco.querySelector(".spark"), [{ transform: "scale(0.6) rotate(0deg)" }, { transform: "scale(1.3) rotate(45deg)" }, { transform: "scale(0.6) rotate(90deg)" }], 160, 0, null, Math.ceil(D * HIT / 160));
+      // where each tile rides on top of the cloud
+      var order = items.slice().sort(function (p, q) { return p.sx - q.sx; });
+      function seat(j) { var x = ix + (j - (n - 1) / 2) * h * 1.15, e = (x - ix) / (capW / 2); return [x, capY - h * 1.25 - r - h * 0.35 + e * e * h * 0.9]; }
+      order.forEach(function (it, j) {
+        var st = seat(j), spin = (j % 2 ? -1 : 1) * (it === b ? 720 : 360), f;
+        if (it === b) {
+          f = [{ offset: 0, transform: T(b.sx, b.sy) }, { offset: LIFT, transform: T(b.sx, b.sy, { sx: 1.1, sy: 0.9 }), easing: UP },
+               { offset: TOP, transform: T(ix, topY), easing: "ease-in-out" }, { offset: 0.27, transform: T(ix, topY, { r: -10 }), easing: "ease-in-out" },
+               { offset: 0.3, transform: T(ix, topY, { r: 10 }), easing: "ease-in-out" }, { offset: DROP, transform: T(ix, topY - h * 0.15), easing: "cubic-bezier(.5,0,1,.5)" },
+               { offset: HIT, transform: T(ix, floorY - h * 0.5, { sx: 1.3, sy: 0.6 }) },
+               { offset: HIT + 0.02, transform: T(ix, floorY - h * 0.5, { sx: 0.9, sy: 1.15 }), easing: "cubic-bezier(.1,.9,.3,1)" }];
+        } else {
+          f = [{ offset: 0, transform: T(it.sx, it.sy) }, { offset: 0.24, transform: T(it.sx, it.sy), easing: "ease-in-out" }];
+          for (var q = 0; q < 6; q++) f.push({ offset: 0.26 + q * 0.024, transform: T(it.sx + (q % 2 ? 2 : -2), it.sy, { r: q % 2 ? 4 : -4 }), easing: "ease-in-out" });
+          f.push({ offset: HIT, transform: T(it.sx, it.sy), easing: "cubic-bezier(.1,.9,.3,1)" });
+        }
+        f.push({ offset: RISE, transform: T(st[0], st[1], { r: spin }), easing: "ease-in-out" },
+               { offset: 0.62, transform: T(st[0], st[1] - h * 0.12, { r: spin }), easing: "ease-in-out" },
+               { offset: 0.7, transform: T(st[0], st[1], { r: spin }), easing: "ease-in-out" },
+               { offset: 0.76, transform: T(st[0], st[1] - h * 0.12, { r: spin }), easing: "ease-in-out" },
+               { offset: PUFF, transform: T(st[0], st[1], { r: spin }), easing: UP });
+        run(it, home(f, PUFF, st[0], st[1], it, { fromR: spin, spin: spin }), D, 0);
+      });
+      // the mushroom cloud, built from flat rainbow puffs
+      function puff(rad, color, frames) {
+        var p = extra("div");
+        p.style.width = p.style.height = 2 * rad + "px";
+        p.style.borderRadius = "50%"; p.style.background = color; p.style.boxShadow = "0 2px 4px rgba(30,43,74,0.18)";
+        anim(p, frames, D, 0, p);
+      }
+      var base = [ix, floorY - r * 0.8], cnt = Math.max(4, Math.ceil((floorY - capY) / (h * 0.5)));
+      for (var i = 0; i < cnt; i++) { // the stem
+        var sx0 = ix + (i % 2 ? 0.12 : -0.12) * h, sy0 = floorY - r * 0.8 - i * (floorY - capY - r * 0.8) / cnt, ta = HIT + 0.012 * i;
+        puff(r * (1.3 - 0.35 * i / cnt), RAINBOW[4 + (i % 2)], [{ offset: 0, transform: at(base[0], base[1]) + "scale(0)", opacity: 1 },
+          { offset: ta, transform: at(base[0], base[1]) + "scale(0)", opacity: 1, easing: POP }, { offset: ta + 0.06, transform: at(sx0, sy0) + "scale(1)", opacity: 1 },
+          { offset: PUFF, transform: at(sx0, sy0) + "scale(1.05)", opacity: 1, easing: "ease-in" },
+          { offset: PUFF + 0.12, transform: at(sx0 + (i % 2 ? 1 : -1) * h * 0.3, sy0 - h * 0.4) + "scale(1.3)", opacity: 0 },
+          { offset: 1, transform: at(sx0, sy0 - h * 0.4) + "scale(1.3)", opacity: 0 }]);
+      }
+      for (i = 0; i < 8; i++) { // the ground surge
+        var side = i % 2 ? 1 : -1, k = Math.floor(i / 2), gx = ix + side * (k + 1) * h * 0.55, gyy = floorY - r * 0.6;
+        puff(r * (0.9 - k * 0.1), RAINBOW[k + 1], [{ offset: 0, transform: at(ix, gyy) + "scale(0)", opacity: 1 }, { offset: HIT, transform: at(ix, gyy) + "scale(0)", opacity: 1, easing: "cubic-bezier(.1,.9,.3,1)" },
+          { offset: HIT + 0.1, transform: at(gx, gyy) + "scale(1)", opacity: 1 }, { offset: 0.72, transform: at(gx + side * h * 0.6, gyy - h * 0.2) + "scale(1.15)", opacity: 0 },
+          { offset: 1, transform: at(gx + side * h * 0.6, gyy - h * 0.2) + "scale(1.15)", opacity: 0 }]);
+      }
+      [[0.4, 0.9, 3], [-0.15, 1, 2], [-0.7, 0.85, 1], [-1.25, 0.55, 0]].forEach(function (row) { // the cap, bottom row first so the top sits in front
+        var rw = capW * row[1], m = Math.max(2, Math.round(rw / gap));
+        for (var p = 0; p < m; p++) {
+          var x = ix - rw / 2 + p * rw / (m - 1), y = capY + row[0] * h + (p % 2 ? 0.06 : -0.06) * h, dx = (x - ix) * 0.5;
+          puff(r * 1.05, RAINBOW[row[2]], [{ offset: 0, transform: at(ix, floorY - r) + "scale(0)", opacity: 1 },
+            { offset: HIT, transform: at(ix, floorY - r) + "scale(0)", opacity: 1 },
+            { offset: HIT + 0.02, transform: at(ix, floorY - r) + "scale(0.3)", opacity: 1, easing: "cubic-bezier(.1,.9,.3,1)" },
+            { offset: RISE, transform: at(x, y) + "scale(1)", opacity: 1, easing: "ease-in-out" }, { offset: 0.64, transform: at(x, y) + "scale(1.1)", opacity: 1, easing: "ease-in-out" },
+            { offset: 0.72, transform: at(x, y) + "scale(1)", opacity: 1, easing: "ease-in-out" }, { offset: PUFF, transform: at(x, y) + "scale(1.08)", opacity: 1, easing: "ease-in" },
+            { offset: PUFF + 0.14, transform: at(x + dx, y - h * 0.6) + "scale(1.4)", opacity: 0 }, { offset: 1, transform: at(x + dx, y - h * 0.6) + "scale(1.4)", opacity: 0 }]);
+        }
+      });
+      // the flash
+      var fl = extra("div");
+      fl.style.width = "100vw"; fl.style.height = "100vh"; fl.style.background = "#fffdf2"; fl.style.zIndex = 60;
+      anim(fl, [{ offset: 0, opacity: 0 }, { offset: HIT - 0.002, opacity: 0 }, { offset: HIT, opacity: 1 }, { offset: HIT + 0.03, opacity: 0.92, easing: "ease-out" },
+                { offset: HIT + 0.11, opacity: 0 }, { offset: 1, opacity: 0 }], D, 0, fl);
+      if (!FX.keep && navigator.vibrate) setTimeout(function () { try { navigator.vibrate([300, 80, 160]); } catch (e) {} }, D * HIT); // Android phones only; iPads can't vibrate
+      return { rumbles: [{ delay: D * HIT, px: 18, dur: 1500 }, { delay: D * PUFF, px: 8, dur: 600 }] };
     }
   ];
 
-  // The rumble: the whole screen gives a quick shake.
-  function rumble(delay, px) {
+  // The rumble: the whole screen shakes, hard at first and then settling.
+  function rumble(delay, px, dur) {
     var page = document.getElementById("app") || document.getElementById("page");
     if (!page) return;
-    page.animate([{ transform: "translate(0,0)" }, { transform: "translate(" + -px + "px," + px * 0.6 + "px) rotate(-0.5deg)" },
-      { transform: "translate(" + px * 0.8 + "px," + -px * 0.7 + "px) rotate(0.5deg)" }, { transform: "translate(" + -px * 0.5 + "px," + px * 0.4 + "px)" },
-      { transform: "translate(" + px * 0.3 + "px," + -px * 0.2 + "px)" }, { transform: "translate(0,0)" }],
-      { duration: 420, delay: delay, easing: "ease-out" });
+    var n = Math.max(5, Math.round(dur / 70)), f = [{ transform: "translate(0px,0px) rotate(0deg)" }];
+    for (var i = 1; i < n; i++) {
+      var a = px * Math.pow(1 - i / n, 1.2), sg = i % 2 ? -1 : 1;
+      f.push({ transform: "translate(" + (sg * a * (0.7 + Math.random() * 0.3)).toFixed(1) + "px," + (-sg * a * (0.4 + Math.random() * 0.4)).toFixed(1) + "px) rotate(" + (sg * a * 0.05).toFixed(2) + "deg)" });
+    }
+    f.push({ transform: "translate(0px,0px) rotate(0deg)" });
+    page.animate(f, { duration: dur, delay: delay, easing: "linear" });
   }
 
   // items: [{ el, sx, sy, ex, ey, er, done }]. el is a tile already in the page with class "actor";
@@ -781,8 +976,8 @@
     if (last >= 0 && n >= last) n++;
     if (typeof force === "number") n = force;
     last = n;
-    var res = actions[n](items) || {}; // an action can time its rumble to its big moment
-    rumble(res.delay || 0, res.px || 8);
+    var res = actions[n](items) || {}; // an action can time its rumble (or several) to its big moments
+    (res.rumbles || [res]).forEach(function (r) { rumble(r.delay || 0, r.px || 8, r.dur || 420); });
   };
 
   window.FX = FX;
