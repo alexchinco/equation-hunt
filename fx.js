@@ -7,7 +7,11 @@
   style.textContent =
     ".actor { position: fixed; left: 0; top: 0; margin: 0; z-index: 50; pointer-events: none; will-change: transform; }" +
     ".fxextra { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 49; overflow: visible; }" +
-    ".fxrainbow { z-index: -1; }" + // rainbows pass behind the tiles
+    ".fxrainbow { z-index: -1; }" +
+    ".drip { border-radius: 0 0 999px 999px; transform-origin: 50% 0; }" +
+    ".lid { clip-path: polygon(0 0, 100% 0, 100% 55%, 85% 45%, 70% 58%, 55% 44%, 40% 58%, 25% 44%, 10% 56%, 0 46%); transform-origin: 15% 50%; }" +
+    ".cup { clip-path: polygon(0 46%, 10% 56%, 25% 44%, 40% 58%, 55% 44%, 70% 58%, 85% 45%, 100% 55%, 100% 100%, 0 100%); }" +
+    ".baby { padding: 0 !important; }" + // rainbows pass behind the tiles
     ".spark { border-radius: 25%; box-shadow: 0 2px 3px rgba(30,43,74,0.18); }" +
     ".deco { position: absolute; inset: 0; pointer-events: none; }" +
     ".card3d { background: none !important; box-shadow: none !important; transform-style: preserve-3d; }" +
@@ -18,7 +22,8 @@
   document.head.appendChild(style);
 
   var RAINBOW = ["#ff4f7b", "#ff9a3c", "#f5c400", "#3dbb6a", "#3fa9f5", "#8e6cf0"];
-  var FX = { keep: false, actions: ["Wave", "Rainbow colors", "Spin explosion", "Unicorn backs", "Unicorn tile", "Boom", "Rainbow slide"], RAINBOW: RAINBOW };
+  var FX = { keep: false, actions: ["Wave", "Rainbow colors", "Spin explosion", "Unicorn backs", "Unicorn tile", "Boom", "Rainbow slide",
+    "Rainbow melt", "Unicorn egg", "Rocket tower", "Balloon", "Googly stampede", "Rainbow sneeze"], RAINBOW: RAINBOW };
   var last = -1;
 
   // ---- Scattering number tiles in the tray ----
@@ -141,7 +146,8 @@
   }
 
   // Unicorn parts that grow out of a tile (w by h), facing right.
-  function unicornParts(w, h) {
+  function unicornParts(w, h, opt) {
+    opt = opt || {};
     var d = document.createElement("div");
     d.className = "deco";
     var horn = '<svg viewBox="0 0 30 60" style="position:absolute;left:' + (w * 0.6) + 'px;top:' + (-h * 0.5) + 'px;width:' + (h * 0.3) + 'px;height:' + (h * 0.6) +
@@ -167,7 +173,10 @@
       legs += '<div class="leg" style="position:absolute;left:' + (w * x) + 'px;top:' + (h * 0.93) + 'px;width:' + (h * 0.14) + 'px;height:' + (h * 0.34) +
         'px;border-radius:' + (h * 0.07) + 'px;background:#fff;box-shadow:0 2px 3px rgba(30,43,74,0.18);transform-origin:50% 0;border-bottom:' + (h * 0.08) + 'px solid #c9b8ff;box-sizing:border-box"></div>';
     });
-    d.innerHTML = legs + tail + mane + ear + horn + eye;
+    var nose = '<div style="position:absolute;left:' + (w * 0.8) + 'px;top:' + (h * 0.34) + 'px;width:' + (h * 0.42) + 'px;height:' + (h * 0.34) +
+      'px;border-radius:50%;background:#ffc2d9;box-shadow:0 2px 3px rgba(30,43,74,0.18)"><div style="position:absolute;right:' + (h * 0.08) + 'px;top:' + (h * 0.1) +
+      'px;width:' + (h * 0.06) + 'px;height:' + (h * 0.09) + 'px;border-radius:50%;background:#1E2B4A"></div></div>';
+    d.innerHTML = (opt.legs === false ? "" : legs) + (opt.tail === false ? "" : tail) + mane + ear + horn + eye + (opt.nose ? nose : "");
     return d;
   }
 
@@ -365,6 +374,7 @@
         f.push({ offset: 0.5, transform: T(ox, oy, { r: spin }), easing: UP });
         run(it, home(f, 0.5, ox, oy, it, { fromR: spin, spin: spin > 0 ? 360 : -360 }), D, 0);
       });
+      return { delay: D * B, px: 12 };
     },
     function rainbowSlide(items) { // a rainbow grows out from under the equation and the tiles slide down it to the tray
       var h = items[0].el.offsetHeight || 60, W = window.innerWidth;
@@ -399,11 +409,274 @@
         lastEnd = Math.max(lastEnd, t0 + HOP + SL);
       });
       anim(rb.svg, [{ opacity: 1 }, { opacity: 1, offset: lastEnd / (lastEnd + 350) }, { opacity: 0 }], lastEnd + 350, 0, rb.svg);
+    },
+    function rainbowMelt(items) { // tiles melt into rainbow goo, drip, slither to the tray, and pop back up
+      var D = 2200;
+      items.forEach(function (it, k) {
+        var h = it.el.offsetHeight || 60, w = it.el.offsetWidth || h, cs = getComputedStyle(it.el), bg = cs.backgroundColor, fg = cs.color;
+        var c = RAINBOW[k % RAINBOW.length], gy = h * 0.36, x0 = it.sx, y0 = it.sy + gy, x1 = it.ex, y1 = it.ey + gy, rad = cs.borderRadius;
+        var f = [
+          { offset: 0, transform: T(it.sx, it.sy), backgroundColor: bg, color: fg, borderRadius: rad, easing: "ease-in" },
+          { offset: 0.1, transform: T(it.sx, it.sy + h * 0.08, { sx: 1.04, sy: 0.88 }), backgroundColor: c, color: "#fff", borderRadius: rad, easing: "ease-in" },
+          { offset: 0.26, transform: T(x0, y0, { sx: 1.55, sy: 0.26 }), backgroundColor: c, color: c, borderRadius: "50%" }
+        ];
+        for (var s = 0; s <= 10; s++) { // slither: the puddle stretches and bunches like a slug
+          var t = s / 10, wob = Math.sin(t * Math.PI * 4);
+          f.push({ offset: 0.4 + 0.42 * t, transform: T(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, { sx: 1.55 + 0.3 * wob, sy: 0.26 - 0.05 * wob, r: it.er * t }), backgroundColor: c, color: c, borderRadius: "50%" });
+        }
+        f.push({ offset: 0.9, transform: T(it.ex, it.ey - h * 0.18, { sx: 0.8, sy: 1.3, r: it.er }), backgroundColor: bg, color: fg, borderRadius: rad, easing: POP });
+        f.push({ offset: 1, transform: T(it.ex, it.ey, { r: it.er }), backgroundColor: bg, color: fg, borderRadius: rad });
+        run(it, f, D, k * 80);
+        for (var d = 0; d < 3; d++) { // goo drips running down from the melting tile
+          var dr = extra("div", "drip"), dw = h * (0.12 + Math.random() * 0.06), dh = h * (0.5 + Math.random() * 0.6);
+          var dx = it.sx + (d - 1) * w * 0.38 + (Math.random() - 0.5) * 6;
+          dr.style.width = dw + "px"; dr.style.height = dh + "px"; dr.style.background = c;
+          dr.style.left = (dx - dw / 2) + "px"; dr.style.top = (y0 - 2) + "px";
+          anim(dr, [{ offset: 0, transform: "scaleY(0)", opacity: 1 }, { offset: 0.22, transform: "scaleY(0)", opacity: 1, easing: "ease-out" },
+                    { offset: 0.38, transform: "scaleY(1)", opacity: 1 }, { offset: 0.5, transform: "scaleY(1)", opacity: 1, easing: "ease-in" },
+                    { offset: 0.6, transform: "scaleY(0.6) translateY(" + dh * 0.4 + "px)", opacity: 0 }, { offset: 1, transform: "scaleY(0)", opacity: 0 }], D, k * 80, dr);
+        }
+      });
+    },
+    function unicornEgg(items) { // the left tile hatches a tiny unicorn that bounces across the other tiles
+      var u = items[0], rest = items.slice(1), h = u.el.offsetHeight || 60, w = u.el.offsetWidth || h, W = window.innerWidth, D = 3200;
+      var n = rest.length, dir = u.sx + (n + 1) * h * 1.35 < W - h ? 1 : -1;
+      var stones = rest.map(function (it, j) { return [u.sx + dir * (j + 1) * h * 1.35, u.sy + (j + 1) * h * 0.28]; });
+      // The egg: the tile splits into a lid and a cup along a zigzag crack.
+      var el = u.el, top = el.cloneNode(true), cup = el.cloneNode(true);
+      [top, cup].forEach(function (e) { e.classList.remove("actor"); e.classList.add("face"); e.removeAttribute("style"); el.appendChild(e); });
+      top.classList.add("lid"); cup.classList.add("cup");
+      el.childNodes[0].nodeValue = "";
+      el.classList.add("card3d");
+      anim(top, [{ offset: 0, transform: "translate(0,0) rotate(0deg)" }, { offset: 0.12, transform: "translate(0,0) rotate(0deg)", easing: POP },
+                 { offset: 0.19, transform: "translate(" + -h * 0.25 + "px," + -h * 0.55 + "px) rotate(-35deg)" },
+                 { offset: 0.78, transform: "translate(" + -h * 0.25 + "px," + -h * 0.55 + "px) rotate(-35deg)", easing: "ease-in" },
+                 { offset: 0.84, transform: "translate(0,0) rotate(0deg)" }, { offset: 1, transform: "translate(0,0) rotate(0deg)" }], D);
+      var f = [{ offset: 0, transform: T(u.sx, u.sy) }];
+      [-10, 10, -12, 12, -6].forEach(function (r, j) { f.push({ offset: 0.02 * (j + 1), transform: T(u.sx, u.sy, { r: r }) }); });
+      f.push({ offset: 0.12, transform: T(u.sx, u.sy, { sx: 1.1, sy: 0.9 }) });
+      f.push({ offset: 0.16, transform: T(u.sx, u.sy) });
+      f.push({ offset: 0.82, transform: T(u.sx, u.sy), easing: POP });
+      f.push({ offset: 0.85, transform: T(u.sx, u.sy, { sx: 1.15, sy: 0.85 }) });
+      f.push({ offset: 0.88, transform: T(u.sx, u.sy), easing: UP });
+      run(u, home(f, 0.88, u.sx, u.sy, u), D, 0);
+      // The tiny unicorn: a little tile of its own with unicorn parts.
+      var m = h * 0.55, baby = extra("div", "ttile baby");
+      baby.style.width = baby.style.height = m + "px"; baby.style.minWidth = m + "px"; baby.style.zIndex = 51;
+      var parts = unicornParts(m, m);
+      if (dir < 0) parts.style.transform = "scaleX(-1)";
+      baby.appendChild(parts);
+      var bf = [{ offset: 0, transform: at(u.sx, u.sy) + "scale(0)" }, { offset: 0.17, transform: at(u.sx, u.sy) + "scale(0)", easing: UP },
+                { offset: 0.24, transform: at(u.sx, u.sy - h * 0.9) + "scale(1.1)", easing: "ease-in-out" },
+                { offset: 0.27, transform: at(u.sx, u.sy - h * 0.8) + "scale(1)" }];
+      var hopT = 0.38 / Math.max(1, n), prev = [u.sx, u.sy - h * 0.8], landTimes = [];
+      stones.forEach(function (p, j) {
+        var t0 = 0.27 + hopT * j, land = [p[0], p[1] - h * 0.5 - m * 0.45];
+        bf.push({ offset: t0 + hopT * 0.5, transform: at((prev[0] + land[0]) / 2, Math.min(prev[1], land[1]) - h * 0.9) + "scale(1)", easing: DOWN });
+        bf.push({ offset: t0 + hopT * 0.9, transform: at(land[0], land[1]) + "scale(1.15,0.85)", easing: UP });
+        bf.push({ offset: t0 + hopT, transform: at(land[0], land[1] - 4) + "scale(1)" });
+        landTimes.push(t0 + hopT * 0.9);
+        prev = land;
+      });
+      bf[bf.length - 1].easing = UP;
+      bf.push({ offset: 0.71, transform: at((prev[0] + u.sx) / 2, Math.min(prev[1], u.sy) - h * 1.6) + "scale(1) rotate(" + -360 * dir + "deg)", easing: DOWN });
+      bf.push({ offset: 0.77, transform: at(u.sx, u.sy - h * 0.2) + "scale(0.8) rotate(" + -720 * dir + "deg)", easing: "ease-in" });
+      bf.push({ offset: 0.8, transform: at(u.sx, u.sy) + "scale(0) rotate(" + -720 * dir + "deg)" });
+      bf.push({ offset: 1, transform: at(u.sx, u.sy) + "scale(0) rotate(" + -720 * dir + "deg)" });
+      anim(baby, bf, D, 0, baby);
+      Array.prototype.forEach.call(parts.querySelectorAll(".leg"), function (leg, j) {
+        var s = j % 2 ? 1 : -1;
+        anim(leg, [{ transform: "rotate(0deg)" }, { transform: "rotate(" + 30 * s + "deg)" }, { transform: "rotate(0deg)" }, { transform: "rotate(" + -30 * s + "deg)" },
+                   { transform: "rotate(0deg)" }], 260, D * 0.24, null, Math.ceil(D * 0.53 / 260));
+      });
+      // The other tiles step out to be stepping stones, dip when the unicorn lands, then go home.
+      rest.forEach(function (it, j) {
+        var p = stones[j], lt = landTimes[j];
+        var g = [{ offset: 0, transform: T(it.sx, it.sy) }, { offset: 0.04 + j * 0.03, transform: T(it.sx, it.sy), easing: UP },
+                 { offset: 0.11 + j * 0.03, transform: T((it.sx + p[0]) / 2, Math.min(it.sy, p[1]) - h * 0.7), easing: DOWN },
+                 { offset: 0.18 + j * 0.03, transform: T(p[0], p[1], { sx: 1.1, sy: 0.9 }), easing: POP },
+                 { offset: 0.22 + j * 0.03, transform: T(p[0], p[1]) },
+                 { offset: lt, transform: T(p[0], p[1]), easing: "ease-out" },
+                 { offset: lt + 0.025, transform: T(p[0], p[1] + h * 0.12, { sx: 1.12, sy: 0.85 }), easing: POP },
+                 { offset: lt + 0.06, transform: T(p[0], p[1]) },
+                 { offset: 0.86, transform: T(p[0], p[1]), easing: UP }];
+        run(it, home(g, 0.86, p[0], p[1], it), D, 0);
+      });
+      return { delay: D * 0.12, px: 6 };
+    },
+    function rocketTower(items) { // tiles stack into a tower that sprouts a horn and blasts off on a rainbow
+      var h = items[0].el.offsetHeight || 60, n = items.length, D = 2800, gx = 0, gy = 0, W = window.innerWidth;
+      items.forEach(function (it) { gx += it.sx / n; gy += it.sy / n; });
+      var baseY = Math.max(gy + h * 0.5, (n - 1) * h + h * 2.75), topTile = items[0], order = items.slice(1).concat([topTile]); // the base sits low enough to leave room for blast-off; the left tile ends up on top
+      var lift = (baseY - (n - 1) * h) - h * 0.75, LAUNCH = 0.34, PEAK = 0.6;
+      // horn and face on the top tile
+      var parts = unicornParts(topTile.el.offsetWidth || h, h, { legs: false, tail: false });
+      topTile.el.appendChild(parts);
+      anim(parts, [{ offset: 0, transform: "scale(0)" }, { offset: 0.26, transform: "scale(0)", easing: POP }, { offset: 0.32, transform: "scale(1)" },
+                   { offset: PEAK - 0.01, transform: "scale(1)" }, { offset: PEAK + 0.03, transform: "scale(0)" }, { offset: 1, transform: "scale(0)" }], D);
+      // exhaust: a rainbow drawn out below the tower as it rises
+      var pts = [];
+      for (var i = 0; i <= 20; i++) pts.push([gx + Math.sin(i / 3) * 4, baseY + h * 0.55 - lift * i / 20]);
+      var rb = rainbowAlong(pts, h * 0.13);
+      reveal(rb, D * (PEAK - LAUNCH), D * LAUNCH);
+      anim(rb.svg, [{ opacity: 1 }, { opacity: 1, offset: 0.7 }, { opacity: 0, offset: 0.85 }, { opacity: 0 }], D, 0, rb.svg);
+      // the blast at the top
+      var b = extra("div");
+      var bs = h * 3;
+      b.style.width = b.style.height = bs + "px";
+      b.innerHTML = burstSVG("WHEE!");
+      var cy = baseY - lift - (n - 1) * h / 2;
+      anim(b, [{ offset: 0, transform: at(gx, cy) + "scale(0)", opacity: 1 }, { offset: PEAK, transform: at(gx, cy) + "scale(0)", opacity: 1, easing: POP },
+               { offset: PEAK + 0.06, transform: at(gx, cy) + "scale(1.2) rotate(10deg)", opacity: 1 },
+               { offset: PEAK + 0.2, transform: at(gx, cy) + "scale(1) rotate(5deg)", opacity: 1, easing: "ease-in" },
+               { offset: PEAK + 0.28, transform: at(gx, cy) + "scale(0.4)", opacity: 0 }, { offset: 1, transform: at(gx, cy) + "scale(0.4)", opacity: 0 }], D, 0, b);
+      order.forEach(function (it, j) {
+        var x = gx, y = baseY - j * h, t0 = 0.03 + j * (0.15 / n), t1 = t0 + 0.08; // stacked by 0.29, before the pre-launch shudder at 0.30
+        var f = [{ offset: 0, transform: T(it.sx, it.sy) }, { offset: t0, transform: T(it.sx, it.sy), easing: UP },
+                 { offset: (t0 + t1) / 2, transform: T((it.sx + x) / 2, Math.min(it.sy, y) - h * 1.2), easing: DOWN },
+                 { offset: t1, transform: T(x, y, { sx: 1.1, sy: 0.9 }), easing: POP }, { offset: t1 + 0.03, transform: T(x, y) }];
+        [3, -3, 3, -3].forEach(function (dx, q) { f.push({ offset: LAUNCH - 0.06 + q * 0.015, transform: T(x + dx, y) }); });
+        f.push({ offset: LAUNCH, transform: T(x, y), easing: "cubic-bezier(.5,0,.9,.6)" });
+        f.push({ offset: PEAK, transform: T(x, y - lift) });
+        var a = Math.random() * Math.PI * 2, d = h * (1.6 + Math.random() * 1.2), fx = x + Math.cos(a) * d, fy = Math.max(h * 0.6, y - lift + Math.sin(a) * d * 0.6);
+        var spin = (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 360);
+        f[f.length - 1].easing = UP;
+        f.push({ offset: PEAK + 0.1, transform: T(fx, fy, { r: spin * 0.4 }), easing: "cubic-bezier(.5,0,.9,.5)" });
+        f.push({ offset: 0.94, transform: T(it.ex, it.ey, { r: it.er + spin, sx: 1.14, sy: 0.86 }), easing: POP });
+        f.push({ offset: 1, transform: T(it.ex, it.ey, { r: it.er + spin }) });
+        run(it, f, D, 0);
+      });
+      return { delay: D * PEAK, px: 12 };
+    },
+    function balloon(items) { // one tile blows up like a balloon and pops in a rainbow blast, flinging the others home
+      var D = 2400, POPT = 0.46, b = items[Math.floor(items.length / 2)], h = b.el.offsetHeight || 60;
+      var small = Math.min(window.innerWidth, window.innerHeight), big = Math.min(4.2, small * 0.55 / h);
+      var bf = [{ offset: 0, transform: T(b.sx, b.sy), borderRadius: getComputedStyle(b.el).borderRadius }];
+      var steps = [[0.08, 1.5, 1.35, -4], [0.14, 1.35, 1.5, 4], [0.22, 2.3, 2.1, -5], [0.28, 2.1, 2.35, 5], [0.36, big, big * 0.92, -3], [0.42, big * 0.94, big * 1.04, 3]];
+      steps.forEach(function (s) { bf.push({ offset: s[0], transform: T(b.sx, b.sy - h * (s[1] - 1) * 0.3, { sx: s[1], sy: s[2], r: s[3] }), borderRadius: "50%", easing: "ease-in-out" }); });
+      bf.push({ offset: POPT, transform: T(b.sx, b.sy - h * (big - 1) * 0.3, { sx: big * 1.08, sy: big * 1.08 }), borderRadius: "50%", opacity: 1 });
+      bf.push({ offset: POPT + 0.01, transform: T(b.sx, b.sy - h * (big - 1) * 0.3, { sx: 0.3, sy: 0.3 }), borderRadius: "50%", opacity: 1, easing: UP });
+      var spinB = 540;
+      bf.push({ offset: POPT + 0.14, transform: T(b.sx, b.sy - h * 2.4, { r: spinB * 0.5 }), borderRadius: getComputedStyle(b.el).borderRadius, easing: DOWN });
+      bf.push({ offset: 0.94, transform: T(b.ex, b.ey, { r: b.er + spinB, sx: 1.14, sy: 0.86 }), easing: POP });
+      bf.push({ offset: 1, transform: T(b.ex, b.ey, { r: b.er + spinB }) });
+      bf.forEach(function (fr) { if (!fr.borderRadius) fr.borderRadius = getComputedStyle(b.el).borderRadius; });
+      run(b, bf, D, 0);
+      // the rainbow blast: rings of color racing outward from the balloon
+      var ringSize = h * big * 1.6, ring = extra("svg");
+      ring.setAttribute("viewBox", "0 0 100 100"); ring.style.width = ring.style.height = ringSize + "px"; ring.style.filter = SHADOW;
+      ring.innerHTML = RAINBOW.map(function (c, k) { return '<circle cx="50" cy="50" r="' + (46 - k * 4) + '" fill="none" stroke="' + c + '" stroke-width="4.4"/>'; }).join("");
+      var cyB = b.sy - h * (big - 1) * 0.3;
+      anim(ring, [{ offset: 0, transform: at(b.sx, cyB) + "scale(0)", opacity: 1 }, { offset: POPT, transform: at(b.sx, cyB) + "scale(0.3)", opacity: 1, easing: "cubic-bezier(.1,.8,.3,1)" },
+                  { offset: POPT + 0.2, transform: at(b.sx, cyB) + "scale(1.6)", opacity: 0 }, { offset: 1, transform: at(b.sx, cyB) + "scale(1.6)", opacity: 0 }], D, 0, ring);
+      items.forEach(function (it) {
+        if (it === b) return;
+        var dx = it.sx - b.sx || 1, push = (h * big * 0.5) * (dx > 0 ? 1 : -1), pr = dx > 0 ? 8 : -8;
+        var fx = it.sx + push * 2.2 + (dx > 0 ? 1 : -1) * h, fy = it.sy - h * (1.2 + Math.random()), spin = (dx > 0 ? 1 : -1) * (400 + Math.random() * 300);
+        var f = [{ offset: 0, transform: T(it.sx, it.sy) }, { offset: 0.08, transform: T(it.sx, it.sy), easing: "ease-in-out" },
+                 { offset: 0.42, transform: T(it.sx + push * 0.6, it.sy, { r: pr }), easing: "ease-in" },
+                 { offset: POPT, transform: T(it.sx + push * 0.7, it.sy, { r: pr }), easing: UP },
+                 { offset: POPT + 0.14, transform: T(fx, fy, { r: spin * 0.5 }), easing: DOWN },
+                 { offset: 0.94, transform: T(it.ex, it.ey, { r: it.er + spin, sx: 1.14, sy: 0.86 }), easing: POP },
+                 { offset: 1, transform: T(it.ex, it.ey, { r: it.er + spin }) }];
+        run(it, f, D, 0);
+      });
+      return { delay: D * POPT, px: 14 };
+    },
+    function googlyStampede(items) { // tiles grow googly eyes and legs, panic, and stampede home; one trips and cartwheels
+      var D = 2300, trip = Math.floor(Math.random() * items.length);
+      items.forEach(function (it, k) {
+        var h = it.el.offsetHeight || 60, w = it.el.offsetWidth || h, legColor = getComputedStyle(it.el).backgroundColor;
+        var dir = it.ex >= it.sx ? 1 : -1;
+        var d = document.createElement("div");
+        d.className = "deco";
+        var eyes = "";
+        [0.2, 0.52].forEach(function (x) {
+          eyes += '<div class="eye" style="position:absolute;left:' + w * x + 'px;top:' + (-h * 0.16) + 'px;width:' + h * 0.3 + 'px;height:' + h * 0.3 +
+            'px;border-radius:50%;background:#fff;box-shadow:0 2px 3px rgba(30,43,74,0.22)"><div class="pupil" style="position:absolute;left:' + h * 0.08 +
+            'px;top:' + h * 0.08 + 'px;width:' + h * 0.14 + 'px;height:' + h * 0.14 + 'px;border-radius:50%;background:#1E2B4A"></div></div>';
+        });
+        var legs = "";
+        [0.24, 0.6].forEach(function (x) {
+          legs += '<div class="leg" style="position:absolute;left:' + w * x + 'px;top:' + h * 0.92 + 'px;width:' + h * 0.14 + 'px;height:' + h * 0.34 +
+            'px;border-radius:' + h * 0.07 + 'px;background:' + legColor + ';box-shadow:0 2px 3px rgba(30,43,74,0.18);transform-origin:50% 0"></div>';
+        });
+        d.innerHTML = legs + eyes;
+        it.el.appendChild(d);
+        anim(d, [{ offset: 0, transform: "scale(0)" }, { offset: 0.08, transform: "scale(1.15)", easing: POP }, { offset: 0.12, transform: "scale(1)" },
+                 { offset: 0.86, transform: "scale(1)" }, { offset: 0.92, transform: "scale(0)" }, { offset: 1, transform: "scale(0)" }], D, k * 60);
+        Array.prototype.forEach.call(d.querySelectorAll(".pupil"), function (p) { // look around in a panic, then look where they're running
+          var a = h * 0.07;
+          anim(p, [{ offset: 0, transform: "translate(0,0)" }, { offset: 0.14, transform: "translate(" + -a + "px,0)" }, { offset: 0.2, transform: "translate(" + a + "px," + -a * 0.5 + "px)" },
+                   { offset: 0.26, transform: "translate(" + -a + "px," + a * 0.5 + "px)" }, { offset: 0.32, transform: "translate(" + a + "px,0)" },
+                   { offset: 0.38, transform: "translate(" + dir * a + "px," + a * 0.6 + "px)" }, { offset: 1, transform: "translate(" + dir * a + "px," + a * 0.6 + "px)" }], D, k * 60);
+        });
+        Array.prototype.forEach.call(d.querySelectorAll(".leg"), function (leg, j) {
+          var s = j ? 1 : -1;
+          anim(leg, [{ transform: "rotate(0deg)" }, { transform: "rotate(" + 35 * s + "deg)" }, { transform: "rotate(0deg)" }, { transform: "rotate(" + -35 * s + "deg)" },
+                     { transform: "rotate(0deg)" }], 180, D * 0.38 + k * 60, null, Math.ceil(D * 0.5 / 180));
+        });
+        var f = [{ offset: 0, transform: T(it.sx, it.sy) }];
+        for (var q = 1; q <= 6; q++) f.push({ offset: 0.12 + q * 0.04, transform: T(it.sx + (q % 2 ? 2 : -2), it.sy - (q % 2 ? h * 0.12 : 0), { r: q % 2 ? 5 : -5 }) });
+        f.push({ offset: 0.38, transform: T(it.sx, it.sy, { sx: 1.1, sy: 0.9 }) });
+        var tripping = k === trip;
+        for (var s = 1; s <= 24; s++) {
+          var t = s / 24, x = it.sx + (it.ex - it.sx) * t, y = it.sy + (it.ey - it.sy) * t - h * 0.5 * Math.sin(Math.PI * t), bob = -h * 0.14 * Math.abs(Math.sin(Math.PI * 9 * t));
+          var r = it.er * t + dir * 6;
+          if (tripping && t > 0.45) { var c = (t - 0.45) / 0.55; r = it.er * t + dir * 720 * c; bob = -h * 0.6 * Math.sin(Math.PI * c); }
+          f.push({ offset: 0.38 + 0.52 * t, transform: T(x, y + bob, { r: r }) });
+        }
+        var endR = it.er + (tripping ? dir * 720 : 0);
+        f[f.length - 1].transform = T(it.ex, it.ey, { r: endR });
+        f.push({ offset: 0.95, transform: T(it.ex, it.ey, { r: endR, sx: 1.12, sy: 0.88 }), easing: POP });
+        f.push({ offset: 1, transform: T(it.ex, it.ey, { r: endR }) });
+        run(it, f, D, k * 60);
+      });
+    },
+    function rainbowSneeze(items) { // the left tile grows a horn and a nose and sneezes a rainbow that blows the others home
+      var u = items[0], rest = items.slice(1), h = u.el.offsetHeight || 60, w = u.el.offsetWidth || h, W = window.innerWidth, D = 2400, CHOO = 0.42;
+      var parts = unicornParts(w, h, { legs: false, tail: false, nose: true });
+      u.el.appendChild(parts);
+      anim(parts, [{ offset: 0, transform: "scale(0)" }, { offset: 0.08, transform: "scale(1.15)", easing: POP }, { offset: 0.12, transform: "scale(1)" },
+                   { offset: 0.8, transform: "scale(1)" }, { offset: 0.86, transform: "scale(0)" }, { offset: 1, transform: "scale(0)" }], D);
+      var f = [{ offset: 0, transform: T(u.sx, u.sy) }, { offset: 0.12, transform: T(u.sx, u.sy), easing: "ease-in-out" },
+               { offset: 0.2, transform: T(u.sx - 4, u.sy - h * 0.05, { r: -10, sx: 1.05, sy: 1.08 }), easing: "ease-in-out" },
+               { offset: 0.26, transform: T(u.sx, u.sy, { r: -4 }), easing: "ease-in-out" },
+               { offset: 0.38, transform: T(u.sx - 8, u.sy - h * 0.12, { r: -20, sx: 1.1, sy: 1.15 }), easing: "cubic-bezier(.6,0,1,.6)" },
+               { offset: CHOO, transform: T(u.sx + 10, u.sy + 4, { r: 14, sx: 1.15, sy: 0.85 }), easing: UP },
+               { offset: CHOO + 0.08, transform: T(u.sx - h * 0.8, u.sy - h * 0.1, { r: -8 }), easing: "ease-out" },
+               { offset: 0.74, transform: T(u.sx - h * 0.8, u.sy - h * 0.1), easing: UP }];
+      run(u, home(f, 0.74, u.sx - h * 0.8, u.sy - h * 0.1, u), D, 0);
+      // the sneeze: a fat rainbow blasting out of the nose
+      var nx = u.sx + w * 0.5 + h * 0.3, ny = u.sy + h * 0.05, far = Math.min(W + h, nx + Math.max(W * 0.5, rest.length * h * 1.6 + h * 2));
+      var pts = [];
+      for (var i = 0; i <= 24; i++) { var t = i / 24; pts.push([nx + (far - nx) * t, ny - Math.sin(t * Math.PI) * h * 0.4 + Math.sin(t * 9) * h * 0.08 * t]); }
+      var rb = rainbowAlong(pts, h * 0.17);
+      reveal(rb, 220, D * CHOO);
+      anim(rb.svg, [{ opacity: 1 }, { opacity: 1, offset: CHOO + 0.18 }, { opacity: 0, offset: CHOO + 0.3 }, { opacity: 0 }], D, 0, rb.svg);
+      var b = extra("div");
+      b.style.width = b.style.height = h * 1.9 + "px";
+      b.innerHTML = burstSVG("ACHOO!");
+      b.style.zIndex = 51;
+      anim(b, [{ offset: 0, transform: at(nx, u.sy - h * 0.9) + "scale(0)", opacity: 1 }, { offset: CHOO, transform: at(nx, u.sy - h * 0.9) + "scale(0)", opacity: 1, easing: POP },
+               { offset: CHOO + 0.05, transform: at(nx, u.sy - h * 0.9) + "scale(1.1) rotate(-8deg)", opacity: 1 },
+               { offset: CHOO + 0.2, transform: at(nx, u.sy - h * 0.9) + "scale(1) rotate(-4deg)", opacity: 1 },
+               { offset: CHOO + 0.28, transform: at(nx, u.sy - h * 0.9) + "scale(0.5)", opacity: 0 }, { offset: 1, transform: at(nx, u.sy - h * 0.9) + "scale(0.5)", opacity: 0 }], D, 0, b);
+      rest.forEach(function (it, j) { // blown away, tumbling, then down into the tray
+        var hit = CHOO + 0.02 + j * 0.015, bx = Math.min(W - h * 0.6, it.sx + W * 0.22 + j * h * 0.4), by = it.sy - h * (0.6 + Math.random() * 0.8);
+        var spin = 540 + Math.random() * 360;
+        var g = [{ offset: 0, transform: T(it.sx, it.sy) }, { offset: 0.3, transform: T(it.sx, it.sy), easing: "ease-in-out" },
+                 { offset: 0.36, transform: T(it.sx + 4, it.sy, { r: 6 }), easing: "ease-in-out" }, { offset: hit, transform: T(it.sx, it.sy), easing: UP },
+                 { offset: hit + 0.14, transform: T(bx, by, { r: spin * 0.5 }), easing: DOWN },
+                 { offset: 0.94, transform: T(it.ex, it.ey, { r: it.er + spin, sx: 1.14, sy: 0.86 }), easing: POP },
+                 { offset: 1, transform: T(it.ex, it.ey, { r: it.er + spin }) }];
+        run(it, g, D, 0);
+      });
+      return { delay: D * CHOO, px: 12 };
     }
   ];
 
-  // The rumble: the whole screen gives a quick shake (bigger, and timed with the blasts, for Boom).
-  var boomAction = actions[5];
+  // The rumble: the whole screen gives a quick shake.
   function rumble(delay, px) {
     var page = document.getElementById("app") || document.getElementById("page");
     if (!page) return;
@@ -423,8 +696,8 @@
     if (last >= 0 && n >= last) n++;
     if (typeof force === "number") n = force;
     last = n;
-    actions[n](items);
-    rumble(actions[n] === boomAction ? 270 : 0, actions[n] === boomAction ? 12 : 8);
+    var res = actions[n](items) || {}; // an action can time its rumble to its big moment
+    rumble(res.delay || 0, res.px || 8);
   };
 
   window.FX = FX;
