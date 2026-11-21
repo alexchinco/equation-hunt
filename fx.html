@@ -52,8 +52,7 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 24px; margin: 0 a
 .tray { flex: none; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .nums { position: relative; width: 100%; max-width: calc(12 * var(--t)); }
 .nums .ttile { position: absolute; left: 0; top: 0; }
-.ops { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; }
-.opgroup { display: flex; gap: 10px; }
+#tprobe { position: absolute; visibility: hidden; width: var(--t); height: 0; }
 
 #controls { flex: none; display: flex; flex-direction: column; gap: 10px; align-items: center;
   padding: 12px; border-radius: 18px; background: rgba(255,255,255,0.85); }
@@ -88,7 +87,7 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 24px; margin: 0 a
 
   <section class="tray">
     <div class="nums" id="nums"></div>
-    <div class="ops" id="ops"></div>
+    <div id="tprobe"></div>
   </section>
 
   <div id="controls">
@@ -123,35 +122,25 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 24px; margin: 0 a
   function pressOnly(seg, btn) {
     Array.prototype.forEach.call(seg.children, function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
   }
-  function tileSize() { return document.querySelector(".ops .ttile").offsetHeight; }
 
-  // Tray: number tiles scattered by the same code the game uses, signs in a tidy row.
+  // Tray: every tile, numbers and signs, scattered by the same code the game uses.
+  // pos holds the numbers' spots first, then the signs'.
+  function spot(isNum, i) { return isNum ? i : NUMS.length + i; }
+  function trayTile(isNum, i) { return $("nums").querySelector('[data-kind="' + (isNum ? "n" : "o") + '"][data-i="' + i + '"]'); }
   function buildTray(reshuffle) {
-    var ops = $("ops");
-    if (!ops.children.length) {
-      ["add", "mul"].forEach(function (fam) {
-        var g = document.createElement("div");
-        g.className = "opgroup";
-        OPS.forEach(function (o, i) {
-          if (o[1] !== fam) return;
-          var t = document.createElement("div");
-          t.className = "ttile " + fam; t.textContent = o[0]; t.dataset.i = i;
-          g.appendChild(t);
-        });
-        ops.appendChild(g);
-      });
-    }
-    var t = tileSize(), nums = $("nums"), W = nums.clientWidth;
-    var H = Math.round(Math.min(4 * t, Math.max(2.6 * t, 36 * t * t / W)));
+    var t = $("tprobe").offsetWidth, nums = $("nums"), W = nums.clientWidth;
+    var H = Math.round(Math.min(7 * t, Math.max(3.2 * t, 60 * t * t / W)));
     nums.style.height = H + "px";
-    if (reshuffle || !pos) pos = FX.scatter(NUMS.length, W, H, t);
+    if (reshuffle || !pos) pos = FX.scatter(NUMS.length + OPS.length, W, H, t);
     nums.innerHTML = "";
-    NUMS.forEach(function (v, i) {
-      var e = document.createElement("div");
-      e.className = "ttile"; e.textContent = v; e.dataset.i = i;
-      e.style.transform = "translate(" + pos[i].x + "px," + pos[i].y + "px) translate(-50%,-50%) rotate(" + pos[i].r + "deg)";
+    function add(text, cls, kind, i) {
+      var e = document.createElement("div"), p = pos[spot(kind === "n", i)];
+      e.className = cls; e.textContent = text; e.dataset.kind = kind; e.dataset.i = i;
+      e.style.transform = "translate(" + p.x + "px," + p.y + "px) translate(-50%,-50%) rotate(" + p.r + "deg)";
       nums.appendChild(e);
-    });
+    }
+    NUMS.forEach(function (v, i) { add(v, "ttile", "n", i); });
+    OPS.forEach(function (o, i) { add(o[0], "ttile " + o[1], "o", i); });
   }
 
   function clear() {
@@ -167,13 +156,13 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 24px; margin: 0 a
     Array.prototype.forEach.call(document.querySelectorAll(".eqrow [data-ni], .eqrow [data-oi]"), function (src) {
       var isNum = src.dataset.ni != null, i = +(isNum ? src.dataset.ni : src.dataset.oi);
       var r = src.getBoundingClientRect();
-      var target = (isNum ? $("nums") : $("ops")).querySelector('[data-i="' + i + '"]'), tr = target.getBoundingClientRect();
+      var target = trayTile(isNum, i), tr = target.getBoundingClientRect();
       var e = src.cloneNode(true);
       e.classList.add("actor");
       e.style.width = r.width + "px"; e.style.height = r.height + "px";
       document.body.appendChild(e);
       src.classList.add("hide"); target.classList.add("hide");
-      items.push({ el: e, sx: r.left + r.width / 2, sy: r.top + r.height / 2, ex: tr.left + tr.width / 2, ey: tr.top + tr.height / 2, er: isNum ? pos[i].r : 0 });
+      items.push({ el: e, sx: r.left + r.width / 2, sy: r.top + r.height / 2, ex: tr.left + tr.width / 2, ey: tr.top + tr.height / 2, er: pos[spot(isNum, i)].r });
     });
     FX.perform(items, action);
     anims = document.getAnimations();

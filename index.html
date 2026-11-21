@@ -135,9 +135,7 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
 
 /* Tray */
 .tray { flex: none; display: flex; flex-direction: column; align-items: center; gap: 12px; padding-bottom: 6px; }
-.opgroup { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
-.ops { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; }
-/* Number tiles lie scattered at random spots, like tiles spilled on a table. */
+/* All tiles, numbers and signs, lie scattered at random spots, like tiles spilled on a table. */
 .nums { position: relative; width: 100%; max-width: calc(12 * var(--t)); flex: none; }
 #nums .ttile { position: absolute; left: 0; top: 0; }
 .ttile.returning { visibility: hidden; }
@@ -220,7 +218,6 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
   <div id="tprobe"></div>
   <section class="tray" id="tray">
     <div class="nums" id="nums"></div>
-    <div class="ops" id="ops"></div>
   </section>
 </div>
 
@@ -503,21 +500,23 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     fill.classList.toggle("low", S.left <= 10);
   }
 
-  // The tray area for number tiles. Its height grows on narrow screens so 12 tiles fit
-  // without touching. Spots are picked again whenever the area changes size.
+  // The tray area. Its height grows on narrow screens so all 20 tiles fit without touching.
+  // Spots are picked again whenever the area changes size. S.pos holds the number tiles'
+  // spots first, then the signs' spots.
+  function spot(isNum, i) { return isNum ? i : S.nums.length + i; }
+  function trayTile(isNum, i) { return $("nums").querySelector('[data-kind="' + (isNum ? "n" : "o") + '"][data-i="' + i + '"]'); }
   function layoutTray() {
     var t = $("tprobe").offsetWidth || 70, nums = $("nums"), W = nums.clientWidth || 600;
-    var H = Math.round(Math.min(4 * t, Math.max(2.6 * t, 36 * t * t / W)));
+    var H = Math.round(Math.min(7 * t, Math.max(3.2 * t, 60 * t * t / W)));
     nums.style.height = H + "px";
     var a = S.area;
     if (!S.pos || !a || a.W !== W || a.H !== H || a.t !== t) {
-      S.pos = FX.scatter(S.nums.length, W, H, t);
+      S.pos = FX.scatter(S.nums.length + S.ops.length, W, H, t);
       S.area = { W: W, H: H, t: t };
     }
   }
 
-  // A correct equation: its tiles do a little action, then fly back to the tray.
-  // Number tiles land in new random spots; signs go back to their places in the row.
+  // A correct equation: its tiles do a little action, then fly back to new random spots in the tray.
   function sendTilesHome() {
     var actors = [];
     Array.prototype.forEach.call($("eqbar").querySelectorAll("[data-ni], [data-oi]"), function (e) {
@@ -526,24 +525,22 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     });
     var a = S.area;
     actors.forEach(function (it) {
-      if (it.isNum) {
-        var p = FX.freeSpot(S.pos, it.i, a.W, a.H, a.t);
-        if (p) S.pos[it.i] = p;
-        S.returning.n[it.i] = true;
-      } else S.returning.o[it.i] = true;
+      var k = spot(it.isNum, it.i), p = FX.freeSpot(S.pos, k, a.W, a.H, a.t);
+      if (p) S.pos[k] = p;
+      S.returning[it.isNum ? "n" : "o"][it.i] = true;
     });
     S.lhs = null; S.rhs = null;
     render();
     var items = actors.map(function (it) {
-      var target = (it.isNum ? $("nums") : $("ops")).querySelector('[data-i="' + it.i + '"]');
+      var target = trayTile(it.isNum, it.i);
       var tr = target.getBoundingClientRect();
       var e = el("div", "ttile actor" + (it.isNum ? "" : " " + FAM[S.ops[it.i]]), it.isNum ? S.nums[it.i] : SYM[S.ops[it.i]]);
       e.style.width = it.w + "px"; e.style.height = it.h + "px";
       document.body.appendChild(e);
-      return { el: e, sx: it.sx, sy: it.sy, ex: tr.left + tr.width / 2, ey: tr.top + tr.height / 2, er: it.isNum ? S.pos[it.i].r : 0,
+      return { el: e, sx: it.sx, sy: it.sy, ex: tr.left + tr.width / 2, ey: tr.top + tr.height / 2, er: S.pos[spot(it.isNum, it.i)].r,
         done: function () {
           delete S.returning[it.isNum ? "n" : "o"][it.i];
-          var tile = (it.isNum ? $("nums") : $("ops")).querySelector('[data-i="' + it.i + '"]');
+          var tile = trayTile(it.isNum, it.i);
           if (tile) tile.classList.remove("returning");
         } };
     });
@@ -568,19 +565,14 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
       t.style.transform = "translate(" + p.x + "px," + p.y + "px) translate(-50%,-50%) rotate(" + p.r + "deg)";
       nums.appendChild(t);
     });
-    var ops = $("ops");
-    ops.innerHTML = "";
-    ["add", "mul"].forEach(function (fam) {
-      var g = el("div", "opgroup");
-      S.ops.forEach(function (o, i) {
-        if (FAM[o] !== fam) return;
-        var t = el("div", "ttile " + fam + (usedO[i] ? " used" : "") + (S.returning.o[i] ? " returning" : ""), SYM[o]);
-        t.dataset.kind = "o";
-        t.dataset.i = i;
-        t.setAttribute("aria-label", NAME[o]);
-        g.appendChild(t);
-      });
-      ops.appendChild(g);
+    S.ops.forEach(function (o, i) {
+      var t = el("div", "ttile " + FAM[o] + (usedO[i] ? " used" : "") + (S.returning.o[i] ? " returning" : ""), SYM[o]);
+      t.dataset.kind = "o";
+      t.dataset.i = i;
+      t.setAttribute("aria-label", NAME[o]);
+      var p = S.pos[spot(false, i)];
+      t.style.transform = "translate(" + p.x + "px," + p.y + "px) translate(-50%,-50%) rotate(" + p.r + "deg)";
+      nums.appendChild(t);
     });
 
     var bar = $("eqbar");
