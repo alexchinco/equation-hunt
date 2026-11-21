@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Animation Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&display=swap">
+<style>
+/* Tile look copied from the game (index.html) so the actions look the same here. */
+:root {
+  --sky: #FCE4EC;
+  --ink: #1E2B4A;
+  --muted: #5D6E8C;
+  --tile: #FFFFFF;
+  --edge: #A9BFD9;
+  --add: #14A38B;
+  --mul: #EF7D22;
+  --go: #3B5BDB;
+  --go-tint: #E3E9FF;
+  --display: "Fredoka", system-ui, sans-serif;
+  --t: clamp(48px, 8.5vh, 84px);
+  --t-font: clamp(26px, 4.7vh, 46px);
+  --t-radius: clamp(10px, 1.8vh, 18px);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--sky); color: var(--ink); font-family: "Nunito", sans-serif; overflow: hidden; }
+button { font: inherit; color: inherit; cursor: pointer; }
+
+.ttile {
+  min-width: var(--t); height: var(--t); padding: 0 6px; border-radius: var(--t-radius);
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  background: var(--tile); box-shadow: 0 2px 4px rgba(30, 43, 74, 0.18);
+  font-family: var(--display); font-weight: 600; font-size: var(--t-font); font-variant-numeric: tabular-nums;
+}
+.ttile.add { background: var(--add); color: #fff; }
+.ttile.mul { background: var(--mul); color: #fff; }
+.hide { visibility: hidden; }
+
+#page { height: 100%; max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px; }
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 24px; margin: 0 auto 0 0; }
+.stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.eqrow { display: flex; align-items: center; gap: 10px; }
+.equals { font-family: var(--display); font-weight: 700; font-size: var(--t-font); color: var(--go); padding: 0 4px; }
+.slot { width: var(--t); height: var(--t); border-radius: var(--t-radius); border: 3px dashed var(--edge); display: inline-flex; align-items: center; justify-content: center; }
+.slot.lhs { border-color: var(--go); background: var(--go-tint); }
+.slot .ttile { margin: -3px; }
+.tray { flex: none; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.nums { position: relative; width: 100%; max-width: calc(12 * var(--t)); }
+.nums .ttile { position: absolute; left: 0; top: 0; }
+.ops { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; }
+.opgroup { display: flex; gap: 10px; }
+
+#controls { flex: none; display: flex; flex-direction: column; gap: 10px; align-items: center;
+  padding: 12px; border-radius: 18px; background: rgba(255,255,255,0.85); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; width: 100%; }
+.btn { border: 2px solid var(--ink); background: #fff; border-radius: 12px; padding: 8px 14px; font-weight: 800; font-size: 15px; }
+.btn.on { background: var(--ink); color: #fff; }
+.seg { display: inline-flex; border: 2px solid var(--ink); border-radius: 12px; overflow: hidden; background: #fff; }
+.seg button { border: none; background: none; padding: 7px 12px; font-weight: 800; font-size: 14px; }
+.seg button + button { border-left: 2px solid var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.lbl { font-weight: 800; font-size: 13px; color: var(--muted); }
+#scrub { flex: 1; min-width: 160px; max-width: 520px; accent-color: var(--ink); }
+#time { font-family: var(--display); font-weight: 600; font-variant-numeric: tabular-nums; min-width: 72px; }
+</style>
+</head>
+<body>
+<div id="page">
+  <header>
+    <h1>Animation Lab</h1>
+    <button type="button" class="btn" id="shuffle">Shuffle tray</button>
+  </header>
+
+  <section class="stage">
+    <div class="eqrow">
+      <div class="slot lhs"><div class="ttile" data-ni="0">5</div></div>
+      <span class="equals">=</span>
+      <div class="ttile" data-ni="1">3</div>
+      <div class="ttile add" data-oi="0">+</div>
+      <div class="ttile" data-ni="2">2</div>
+    </div>
+  </section>
+
+  <section class="tray">
+    <div class="nums" id="nums"></div>
+    <div class="ops" id="ops"></div>
+  </section>
+
+  <div id="controls">
+    <div class="row" id="actionRow"><span class="lbl">Action</span></div>
+    <div class="row">
+      <button type="button" class="btn" id="replay">Replay</button>
+      <button type="button" class="btn" id="pause">Pause</button>
+      <span class="lbl">Speed</span>
+      <div class="seg" id="speedSeg">
+        <button type="button" data-speed="1" aria-pressed="true">1&times;</button>
+        <button type="button" data-speed="0.5" aria-pressed="false">&frac12;&times;</button>
+        <button type="button" data-speed="0.25" aria-pressed="false">&frac14;&times;</button>
+        <button type="button" data-speed="0.1" aria-pressed="false">1/10&times;</button>
+      </div>
+    </div>
+    <div class="row">
+      <input type="range" id="scrub" min="0" max="2000" step="5" value="0" aria-label="Animation time">
+      <span id="time">0.00 s</span>
+    </div>
+  </div>
+</div>
+
+<script src="fx.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var NUMS = [5, 3, 2, 4, 1, 7, 2, 6, 8, 3, 2, 10]; // the first three are the ones in the equation
+  var OPS = [["+", "add"], ["+", "add"], ["−", "add"], ["−", "add"], ["×", "mul"], ["×", "mul"], ["÷", "mul"], ["÷", "mul"]];
+  var action = 0, speed = 1, paused = false, anims = [], END = 2000, pos = null;
+  FX.keep = true; // leave the tiles where the action ends so the timeline can be scrubbed
+
+  function pressOnly(seg, btn) {
+    Array.prototype.forEach.call(seg.children, function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
+  }
+  function tileSize() { return document.querySelector(".ops .ttile").offsetHeight; }
+
+  // Tray: number tiles scattered by the same code the game uses, signs in a tidy row.
+  function buildTray(reshuffle) {
+    var ops = $("ops");
+    if (!ops.children.length) {
+      ["add", "mul"].forEach(function (fam) {
+        var g = document.createElement("div");
+        g.className = "opgroup";
+        OPS.forEach(function (o, i) {
+          if (o[1] !== fam) return;
+          var t = document.createElement("div");
+          t.className = "ttile " + fam; t.textContent = o[0]; t.dataset.i = i;
+          g.appendChild(t);
+        });
+        ops.appendChild(g);
+      });
+    }
+    var t = tileSize(), nums = $("nums"), W = nums.clientWidth;
+    var H = Math.round(Math.min(4 * t, Math.max(2.6 * t, 36 * t * t / W)));
+    nums.style.height = H + "px";
+    if (reshuffle || !pos) pos = FX.scatter(NUMS.length, W, H, t);
+    nums.innerHTML = "";
+    NUMS.forEach(function (v, i) {
+      var e = document.createElement("div");
+      e.className = "ttile"; e.textContent = v; e.dataset.i = i;
+      e.style.transform = "translate(" + pos[i].x + "px," + pos[i].y + "px) translate(-50%,-50%) rotate(" + pos[i].r + "deg)";
+      nums.appendChild(e);
+    });
+  }
+
+  function clear() {
+    document.getAnimations().forEach(function (a) { a.cancel(); });
+    Array.prototype.forEach.call(document.querySelectorAll(".actor"), function (n) { n.remove(); });
+    Array.prototype.forEach.call(document.querySelectorAll(".hide"), function (n) { n.classList.remove("hide"); });
+  }
+
+  // Same steps the game takes: the equation's tiles become actors that act, then fly to their tray spots.
+  function play() {
+    clear();
+    var items = [];
+    Array.prototype.forEach.call(document.querySelectorAll(".eqrow [data-ni], .eqrow [data-oi]"), function (src) {
+      var isNum = src.dataset.ni != null, i = +(isNum ? src.dataset.ni : src.dataset.oi);
+      var r = src.getBoundingClientRect();
+      var target = (isNum ? $("nums") : $("ops")).querySelector('[data-i="' + i + '"]'), tr = target.getBoundingClientRect();
+      var e = src.cloneNode(true);
+      e.classList.add("actor");
+      e.style.width = r.width + "px"; e.style.height = r.height + "px";
+      document.body.appendChild(e);
+      src.classList.add("hide"); target.classList.add("hide");
+      items.push({ el: e, sx: r.left + r.width / 2, sy: r.top + r.height / 2, ex: tr.left + tr.width / 2, ey: tr.top + tr.height / 2, er: isNum ? pos[i].r : 0 });
+    });
+    FX.perform(items, action);
+    anims = document.getAnimations();
+    END = 0;
+    anims.forEach(function (a) { a.playbackRate = speed; END = Math.max(END, a.effect.getComputedTiming().endTime); });
+    $("scrub").max = END;
+    if (paused) seek(0);
+  }
+
+  function now() { var t = 0; anims.forEach(function (a) { if (a.currentTime > t) t = a.currentTime; }); return t; }
+  function seek(t) { anims.forEach(function (a) { a.pause(); a.currentTime = t; }); show(t); }
+  function show(t) { t = Math.min(END, t); $("scrub").value = t; $("time").textContent = (t / 1000).toFixed(2) + " s"; }
+  function setPaused(p) {
+    paused = p;
+    $("pause").textContent = p ? "Play" : "Pause";
+    $("pause").classList.toggle("on", p);
+    if (p) anims.forEach(function (a) { a.pause(); });
+    else if (now() >= END - 1) play();
+    else anims.forEach(function (a) { a.playbackRate = speed; a.play(); });
+  }
+  function restart() { paused = false; $("pause").textContent = "Pause"; $("pause").classList.remove("on"); play(); }
+  (function tick() {
+    if (!paused && anims.length) {
+      var t = now();
+      show(t);
+      if (t >= END - 1 || anims.every(function (a) { return a.playState === "finished"; })) { show(END); setPaused(true); }
+    }
+    requestAnimationFrame(tick);
+  })();
+
+  FX.actions.forEach(function (name, i) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "btn" + (i === 0 ? " on" : ""); b.textContent = name;
+    b.addEventListener("click", function () {
+      action = i;
+      Array.prototype.forEach.call(document.querySelectorAll("#actionRow .btn"), function (x) { x.classList.toggle("on", x === b); });
+      restart();
+    });
+    $("actionRow").appendChild(b);
+  });
+  $("replay").addEventListener("click", restart);
+  $("pause").addEventListener("click", function () { setPaused(!paused); });
+  $("scrub").addEventListener("input", function () { if (!paused) setPaused(true); seek(+this.value); });
+  $("speedSeg").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    speed = +b.dataset.speed; pressOnly(this, b);
+    anims.forEach(function (a) { a.playbackRate = speed; });
+  });
+  $("shuffle").addEventListener("click", function () { clear(); buildTray(true); play(); });
+  window.addEventListener("resize", function () { clear(); buildTray(true); anims = []; show(0); });
+
+  buildTray(true);
+  document.fonts.ready.then(function () { setTimeout(play, 300); });
+})();
+</script>
+</body>
+</html>

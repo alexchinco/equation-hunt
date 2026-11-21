@@ -102,7 +102,6 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
 }
 .eqrow { display: flex; align-items: center; gap: 10px; }
 .equals { font-family: var(--display); font-weight: 700; font-size: var(--t-font); color: var(--go); padding: 0 4px; }
-#eqbar.yay { animation: yay 0.45s; }
 .msg { min-height: 26px; font-size: 19px; font-weight: 800; color: var(--muted); text-align: center; }
 .msg.good { color: var(--good); }
 .msg.bad { color: var(--bad); }
@@ -136,9 +135,13 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
 
 /* Tray */
 .tray { flex: none; display: flex; flex-direction: column; align-items: center; gap: 12px; padding-bottom: 6px; }
-.nums, .opgroup { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.opgroup { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .ops { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; }
-.nums { max-width: calc(6 * var(--t) + 50px); }
+/* Number tiles lie scattered at random spots, like tiles spilled on a table. */
+.nums { position: relative; width: 100%; max-width: calc(12 * var(--t)); flex: none; }
+#nums .ttile { position: absolute; left: 0; top: 0; }
+.ttile.returning { visibility: hidden; }
+#tprobe { position: absolute; visibility: hidden; width: var(--t); height: 0; }
 .ttile { touch-action: none; cursor: grab; }
 .ttile.used { visibility: hidden; }
 .tray.off .ttile { cursor: default; }
@@ -187,16 +190,13 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
 
 @keyframes yay { 0% { transform: scale(1); } 40% { transform: scale(1.04); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
-  #eqbar.yay, .list li.new { animation: none; }
+  .list li.new { animation: none; }
   #timefill { transition: none; }
 }
 
 @media (max-width: 620px) {
   .brand { font-size: 20px; }
 }
-.confetti { border: 2.5px solid #2b2140; border-radius: 3px; box-sizing: border-box; }
-.flash { background: #fff; }
-.burst { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 50; line-height: 1; will-change: transform, opacity; }
 </style>
 </head>
 <body>
@@ -217,6 +217,7 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     <div class="msg" id="msg"></div>
   </section>
 
+  <div id="tprobe"></div>
   <section class="tray" id="tray">
     <div class="nums" id="nums"></div>
     <div class="ops" id="ops"></div>
@@ -263,6 +264,7 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
   </div>
 </div>
 
+<script src="fx.js"></script>
 <script>
 (function () {
   "use strict";
@@ -376,6 +378,7 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     if (node.k === "n") {
       var c = el("div", "piece chip", node.v);
       if (path) c.dataset.path = path;
+      if (node.i != null) c.dataset.ni = node.i;
       return c;
     }
     var n = el("div", "piece node " + FAM[node.op]);
@@ -383,6 +386,7 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     n.appendChild(slotEl(path ? path + ".a" : null, node.a));
     var s = el("span", "opsym", SYM[node.op]);
     s.setAttribute("aria-label", NAME[node.op]);
+    if (node.i != null) s.dataset.oi = node.i;
     n.appendChild(s);
     n.appendChild(slotEl(path ? path + ".b" : null, node.b));
     return n;
@@ -408,12 +412,11 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     m.textContent = t;
     m.className = "msg" + (kind ? " " + kind : "");
   }
-  function animate(e, cls) { e.classList.remove(cls); void e.offsetWidth; e.classList.add(cls); }
 
   function newRound() {
     S = {
       nums: makeNumbers(settings.max), ops: OPS.slice(),
-      lhs: null, rhs: null, found: [], keys: {},
+      lhs: null, rhs: null, found: [], keys: {}, pos: null, area: null, returning: { n: {}, o: {} },
       left: settings.time, running: false, timer: null
     };
     say("", "");
@@ -471,276 +474,11 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     if (S.keys[full]) { say("You already found that one. Keep building!", ""); return true; }
     S.keys[full] = true;
     S.found.unshift({ text: full });
-    S.lhs = null; S.rhs = null;
-    render();
+    sendTilesHome();
     say("Yes! " + full, "good");
-    animate($("eqbar"), "yay");
-    celebrate();
     var first = $("foundList").firstChild;
     if (first) first.classList.add("new");
     return true;
-  }
-
-  // Celebration art. Everything is drawn here as flat cartoon SVG with thick dark
-  // outlines in one palette, so every effect looks like it came from the same cartoon.
-  // Each correct equation plays one short, choreographed scene, picked at random.
-  var INK = "#2b2140";
-  var RAINBOW = ["#ff4f7b", "#ff9a3c", "#ffd93d", "#4ccf7a", "#3fa9f5", "#8e6cf0"];
-  var POP = "cubic-bezier(.34,1.56,.64,1)"; // overshoot, for a cartoon snap
-  var fxId = 0, lastScene = -1;
-
-  function rnd(list) { return list[Math.floor(Math.random() * list.length)]; }
-
-  // The unicorn's body outline: drawn once fat and dark, then again in white on top,
-  // so the outline traces the whole silhouette without lines where parts join.
-  var UNICORN_SHAPE =
-    '<ellipse cx="95" cy="95" rx="48" ry="30"/>' +
-    '<polygon points="116,84 136,42 168,56 148,106"/>' +
-    '<circle cx="160" cy="46" r="27"/>' +
-    '<ellipse cx="184" cy="60" rx="21" ry="16"/>' +
-    '<polygon points="141,28 146,2 160,22"/>' +
-    '<rect x="126" y="96" width="15" height="48" rx="7.5" transform="rotate(-62 133 100)"/>' +
-    '<rect x="122" y="98" width="15" height="48" rx="7.5" transform="rotate(-38 129 102)"/>' +
-    '<rect x="56" y="96" width="15" height="48" rx="7.5" transform="rotate(62 63 100)"/>' +
-    '<rect x="62" y="98" width="15" height="48" rx="7.5" transform="rotate(38 69 102)"/>';
-
-  function unicornSVG() {
-    var o = ' stroke="' + INK + '" stroke-linejoin="round" ';
-    var hoof = function (x, y, rot) {
-      return '<rect x="' + x + '" y="' + (y + 34) + '" width="15" height="14" rx="7" transform="rotate(' + rot + ')" fill="#c7b5ff"/>';
-    };
-    var mane = [[116, 84, 12, 4], [121, 69, 13, 3], [127, 54, 13, 2], [134, 40, 12, 1], [144, 28, 11, 0], [156, 20, 9, 5]];
-    var m = "";
-    mane.forEach(function (c) { m += '<circle cx="' + c[0] + '" cy="' + c[1] + '" r="' + c[2] + '" fill="' + RAINBOW[c[3]] + '"' + o + 'stroke-width="4"/>'; });
-    return '<svg viewBox="-8 -8 236 186" width="100%" height="100%" overflow="visible">' +
-      '<g' + o + 'stroke-width="5">' +
-        '<ellipse cx="34" cy="74" rx="30" ry="12" transform="rotate(-30 34 74)" fill="' + RAINBOW[0] + '"/>' +
-        '<ellipse cx="28" cy="90" rx="31" ry="12" transform="rotate(-6 28 90)" fill="' + RAINBOW[2] + '"/>' +
-        '<ellipse cx="32" cy="106" rx="30" ry="12" transform="rotate(18 32 106)" fill="' + RAINBOW[4] + '"/>' +
-      '</g>' +
-      '<g fill="' + INK + '"' + o + 'stroke-width="10">' + UNICORN_SHAPE + '</g>' +
-      '<g fill="#fff">' + UNICORN_SHAPE + '</g>' +
-      hoof(126, 96, "-62 133 100") + hoof(122, 98, "-38 129 102") + hoof(56, 96, "62 63 100") + hoof(62, 98, "38 69 102") +
-      '<ellipse cx="185" cy="60" rx="19" ry="14" fill="#ffd6e7"/>' +
-      m +
-      '<polygon points="158,22 180,-8 172,26" fill="' + RAINBOW[2] + '"' + o + 'stroke-width="4"/>' +
-      '<path d="M162 14 L173 17 M167 5 L176 8" stroke="' + INK + '" stroke-width="3" stroke-linecap="round"/>' +
-      '<circle cx="167" cy="40" r="10" fill="#fff"' + o + 'stroke-width="3.5"/>' +
-      '<circle cx="170" cy="41" r="5.5" fill="' + INK + '"/>' +
-      '<circle cx="172" cy="38.5" r="2" fill="#fff"/>' +
-      '<ellipse cx="158" cy="60" rx="6" ry="4" fill="#ff9cc2"/>' +
-      '<ellipse cx="197" cy="55" rx="2.2" ry="3" fill="' + INK + '"/>' +
-      '<path d="M180 68 Q192 83 203 64 Z" fill="#ff6f91"' + o + 'stroke-width="3"/>' +
-      '</svg>';
-  }
-
-  function starPoints(n, R, r, jitter) {
-    var pts = [];
-    for (var i = 0; i < n * 2; i++) {
-      var a = Math.PI * i / n - Math.PI / 2, rad = (i % 2 ? r : R) * (1 + (Math.random() - 0.5) * jitter);
-      pts.push((100 + Math.cos(a) * rad).toFixed(1) + "," + (100 + Math.sin(a) * rad).toFixed(1));
-    }
-    return pts.join(" ");
-  }
-
-  // Comic-book explosion with a word in the middle.
-  function boomSVG(word) {
-    var o = ' stroke="' + INK + '" stroke-linejoin="round" ';
-    return '<svg viewBox="0 0 200 200" width="100%" height="100%" overflow="visible">' +
-      '<polygon points="' + starPoints(12, 100, 66, 0.22) + '" fill="' + RAINBOW[0] + '"' + o + 'stroke-width="6"/>' +
-      '<polygon points="' + starPoints(12, 82, 58, 0.12) + '" fill="' + RAINBOW[1] + '"' + o + 'stroke-width="5"/>' +
-      '<polygon points="' + starPoints(10, 66, 52, 0.08) + '" fill="' + RAINBOW[2] + '"' + o + 'stroke-width="5"/>' +
-      '<text x="100" y="102" text-anchor="middle" dominant-baseline="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="' +
-      (word.length > 5 ? 26 : 36) + '" fill="#fff"' + o + 'stroke-width="8" paint-order="stroke" transform="rotate(-8 100 100)">' + word + '</text>' +
-      '</svg>';
-  }
-
-  // Paint splat: a lumpy blob plus a few drops.
-  function splatSVG(color) {
-    var n = 14, pts = [], d, i;
-    for (i = 0; i < n; i++) {
-      var a = 2 * Math.PI * i / n, rad = i % 2 ? 48 + Math.random() * 10 : 70 + Math.random() * 22;
-      pts.push([100 + Math.cos(a) * rad, 100 + Math.sin(a) * rad]);
-    }
-    var mid = function (p, q) { return ((p[0] + q[0]) / 2).toFixed(1) + " " + ((p[1] + q[1]) / 2).toFixed(1); };
-    d = "M" + mid(pts[n - 1], pts[0]);
-    for (i = 0; i < n; i++) d += " Q" + pts[i][0].toFixed(1) + " " + pts[i][1].toFixed(1) + " " + mid(pts[i], pts[(i + 1) % n]);
-    var drops = "";
-    for (i = 0; i < 4; i++) {
-      var b = Math.random() * Math.PI * 2, dist = 100 + Math.random() * 18;
-      drops += '<circle cx="' + (100 + Math.cos(b) * dist).toFixed(1) + '" cy="' + (100 + Math.sin(b) * dist).toFixed(1) + '" r="' + (6 + Math.random() * 6).toFixed(1) + '"/>';
-    }
-    return '<svg viewBox="0 0 200 200" width="100%" height="100%" overflow="visible"><g fill="' + color + '" stroke="' + INK + '" stroke-width="5" stroke-linejoin="round">' +
-      '<path d="' + d + 'Z"/>' + drops + '</g>' +
-      '<ellipse cx="78" cy="76" rx="14" ry="8" transform="rotate(-30 78 76)" fill="#fff" opacity="0.55"/></svg>';
-  }
-
-  // Rainbow mushroom cloud.
-  function cloudSVG() {
-    var id = "fx" + (++fxId), stops = function (vertical) {
-      var s = "";
-      RAINBOW.forEach(function (c, k) { s += '<stop offset="' + (k / 6) + '" stop-color="' + c + '"/><stop offset="' + ((k + 1) / 6) + '" stop-color="' + c + '"/>'; });
-      return s;
-    };
-    var cap = '<circle cx="100" cy="72" r="50"/><circle cx="58" cy="82" r="36"/><circle cx="142" cy="82" r="36"/>' +
-      '<circle cx="74" cy="46" r="33"/><circle cx="126" cy="46" r="33"/><circle cx="100" cy="36" r="36"/>' +
-      '<circle cx="40" cy="100" r="22"/><circle cx="160" cy="100" r="22"/>';
-    var stem = '<path d="M84 112 Q80 160 68 200 L132 200 Q120 160 116 112 Z"/>';
-    var base = '<circle cx="62" cy="202" r="22"/><circle cx="138" cy="202" r="22"/><circle cx="100" cy="208" r="26"/>';
-    return '<svg viewBox="0 0 200 240" width="100%" height="100%" overflow="visible"><defs>' +
-      '<linearGradient id="' + id + 'c" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="124">' + stops() + '</linearGradient>' +
-      '<linearGradient id="' + id + 's" gradientUnits="userSpaceOnUse" x1="70" y1="0" x2="130" y2="0">' + stops() + '</linearGradient></defs>' +
-      '<g fill="' + INK + '" stroke="' + INK + '" stroke-width="10" stroke-linejoin="round">' + stem + base + cap + '</g>' +
-      '<g fill="url(#' + id + 's)">' + stem + '</g><g fill="#f4efff">' + base + '</g><g fill="url(#' + id + 'c)">' + cap + '</g>' +
-      '<g fill="#fff" opacity="0.5"><ellipse cx="72" cy="38" rx="12" ry="7" transform="rotate(-25 72 38)"/><ellipse cx="50" cy="196" rx="8" ry="5"/></g>' +
-      '</svg>';
-  }
-
-  function celebrate() {
-    var r = $("eqbar").getBoundingClientRect();
-    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    var W = window.innerWidth, H = window.innerHeight, small = Math.min(W, H);
-    var at = function (x, y) { return "translate(" + x + "px," + y + "px) translate(-50%,-50%) "; };
-    function place(html, w, h) {
-      var p = document.createElement("div");
-      p.className = "burst";
-      p.style.width = w + "px"; p.style.height = h + "px";
-      p.innerHTML = html;
-      document.body.appendChild(p);
-      return p;
-    }
-    function go(n, frames, opts) { // easing applies to each step between keyframes, so holds stay put
-      frames.forEach(function (f) { if (!f.easing) f.easing = opts.easing || "linear"; });
-      opts.easing = "linear";
-      n.animate(frames, opts).onfinish = function () { n.remove(); };
-    }
-    function shake(px, ms) {
-      $("app").animate([{ transform: "translate(0,0)" }, { transform: "translate(" + -px + "px," + px * 0.6 + "px) rotate(-0.6deg)" },
-        { transform: "translate(" + px * 0.8 + "px," + -px * 0.7 + "px) rotate(0.6deg)" }, { transform: "translate(" + -px * 0.4 + "px," + px * 0.3 + "px)" },
-        { transform: "translate(0,0)" }], { duration: ms, easing: "ease-out" });
-    }
-    function boom(word, x, y, size, hold) {
-      var b = place(boomSVG(word), size, size);
-      go(b, [{ transform: at(x, y) + "scale(0) rotate(-20deg)" }, { transform: at(x, y) + "scale(1.15) rotate(4deg)", offset: 0.18 },
-             { transform: at(x, y) + "scale(1) rotate(0deg)", offset: 0.28 }, { transform: at(x, y) + "scale(1.04) rotate(-2deg)", offset: 0.75 },
-             { transform: at(x, y) + "scale(0) rotate(10deg)" }], { duration: hold, easing: "ease-out" });
-    }
-    function confetti(x, y, count) {
-      for (var i = 0; i < count; i++) {
-        var w = small * 0.018, c = place("", w, w * 1.8);
-        c.classList.add("confetti");
-        c.style.background = RAINBOW[i % 6];
-        var a = Math.random() * Math.PI * 2, d = small * (0.25 + Math.random() * 0.3);
-        var dx = Math.cos(a) * d, dy = Math.sin(a) * d - small * 0.15, spin = (Math.random() - 0.5) * 900;
-        go(c, [{ transform: at(x, y) + "rotate(0deg)", opacity: 1 }, { transform: at(x + dx, y + dy) + "rotate(" + spin + "deg)", opacity: 1, offset: 0.35 },
-               { transform: at(x + dx * 1.2, y + dy + H * 0.45) + "rotate(" + spin * 2 + "deg)", opacity: 0 }],
-           { duration: 1300 + Math.random() * 400, easing: "cubic-bezier(.2,.7,.4,1)" });
-      }
-    }
-    var uw = small * 0.3, uh = uw * 186 / 236;
-
-    var scenes = [
-      function leap() { // unicorn bursts out of a BOOM and leaps away on a rainbow
-        boom(rnd(["YAY!", "WOW!", "BOOM!"]), cx, cy, small * 0.34, 1000);
-        confetti(cx, cy, 16);
-        var d = Math.random() < 0.5 ? -1 : 1;
-        var rx = W * 0.33, ry = Math.max(small * 0.2, Math.min(cy * 0.62, small * 0.5)), ex = cx + d * rx;
-        var band = small * 0.032, dur = 1500, travel = 0.8;
-        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("class", "burst");
-        svg.setAttribute("width", W); svg.setAttribute("height", H);
-        svg.setAttribute("viewBox", "0 0 " + W + " " + H);
-        var arc = function (k) {
-          var ax = rx + k * band, ay = ry + k * band;
-          return "M" + (ex - d * ax) + " " + cy + " A" + ax + " " + ay + " 0 0 " + (d > 0 ? 1 : 0) + " " + (ex + d * ax) + " " + cy;
-        };
-        var paths = [[arc(0), INK, band * 6 + 8]];
-        RAINBOW.forEach(function (c, k) { paths.push([arc(2.5 - k), c, band + 0.6]); });
-        paths.forEach(function (p) {
-          var e = document.createElementNS("http://www.w3.org/2000/svg", "path");
-          e.setAttribute("d", p[0]); e.setAttribute("fill", "none"); e.setAttribute("stroke", p[1]); e.setAttribute("stroke-width", p[2]);
-          svg.appendChild(e);
-        });
-        document.body.appendChild(svg);
-        Array.prototype.forEach.call(svg.childNodes, function (e) {
-          var L = e.getTotalLength();
-          e.style.strokeDasharray = L + " " + L;
-          e.animate([{ strokeDashoffset: L }, { strokeDashoffset: 0 }], { duration: dur * travel, delay: dur * (1 - travel), easing: "linear", fill: "both" });
-        });
-        go(svg, [{ opacity: 1 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], { duration: dur + 500 });
-        var u = place(unicornSVG(), uw, uh), frames = [
-          { transform: at(cx, cy) + "scale(0)", offset: 0 },
-          { transform: at(cx, cy) + "scale(1.25)", offset: 0.1 },
-          { transform: at(cx, cy) + "scale(1)", offset: 1 - travel }
-        ];
-        for (var s = 1; s <= 16; s++) {
-          var f = s / 16 * Math.PI, x = ex - d * rx * Math.cos(f), y = cy - ry * Math.sin(f);
-          var vx = d * rx * Math.sin(f), vy = -ry * Math.cos(f);
-          var ang = d > 0 ? Math.atan2(vy, vx) : Math.atan2(-vy, -vx), deg = ang * 180 / Math.PI * 0.7;
-          frames.push({ transform: at(x, y) + "rotate(" + deg + "deg)" + (d > 0 ? "" : " scaleX(-1)"), offset: 1 - travel + travel * s / 16 });
-        }
-        frames[1].transform += d > 0 ? "" : " scaleX(-1)"; frames[2].transform += d > 0 ? "" : " scaleX(-1)"; frames[0].transform += d > 0 ? "" : " scaleX(-1)";
-        go(u, frames, { duration: dur, easing: "linear" });
-        shake(8, 350);
-      },
-      function beam() { // a rainbow beam shoots up from the equation and paint splats everywhere
-        boom(rnd(["POW!", "ZAP!", "YES!"]), cx, cy, small * 0.26, 900);
-        var bw = Math.min(r.width * 0.6, small * 0.3), bh = cy, R = bw / 2, id = "fx" + (++fxId), stripes = "";
-        RAINBOW.forEach(function (c, k) { stripes += '<rect x="' + (k * bw / 6) + '" y="0" width="' + (bw / 6 + 0.5) + '" height="' + bh + '" fill="' + c + '"/>'; });
-        var shape = "M0 " + bh + " V" + R + " A" + R + " " + R + " 0 0 1 " + bw + " " + R + " V" + bh + " Z";
-        var b = place('<svg width="' + bw + '" height="' + bh + '" viewBox="0 0 ' + bw + " " + bh + '" overflow="visible"><defs><clipPath id="' + id + '"><path d="' + shape + '"/></clipPath></defs>' +
-          '<g clip-path="url(#' + id + ')">' + stripes + '</g><path d="' + shape + '" fill="none" stroke="' + INK + '" stroke-width="6" stroke-linejoin="round"/></svg>', bw, bh);
-        b.style.transformOrigin = "50% 100%";
-        go(b, [{ transform: "translate(" + (cx - bw / 2) + "px,0) scaleY(0)" }, { transform: "translate(" + (cx - bw / 2) + "px,0) scaleY(1.06)", offset: 0.2 },
-               { transform: "translate(" + (cx - bw / 2) + "px,0) scaleY(1)", offset: 0.3 }, { transform: "translate(" + (cx - bw / 2) + "px,0) scaleY(1)", offset: 0.8 },
-               { transform: "translate(" + (cx - bw / 2) + "px,0) scale(0,1)" }], { duration: 1500, easing: "ease-out" });
-        for (var i = 0; i < 7; i++) {
-          var sz = small * (0.13 + Math.random() * 0.1), x = W * (0.1 + 0.8 * (i + Math.random()) / 7), y = H * (0.08 + Math.random() * 0.45);
-          if (Math.abs(x - cx) < bw) x += (x < cx ? -1 : 1) * bw;
-          var sp = place(splatSVG(RAINBOW[(i + 1) % 6]), sz, sz), rot = Math.random() * 360;
-          go(sp, [{ transform: at(x, y) + "rotate(" + rot + "deg) scale(0)", opacity: 1 }, { transform: at(x, y) + "rotate(" + rot + "deg) scale(1.2)", offset: 0.12 },
-                  { transform: at(x, y) + "rotate(" + rot + "deg) scale(1)", offset: 0.2 }, { transform: at(x, y + 12) + "rotate(" + rot + "deg) scale(1)", opacity: 1, offset: 0.85 },
-                  { transform: at(x, y + 20) + "rotate(" + rot + "deg) scale(0.9)", opacity: 0 }],
-             { duration: 1700, delay: 200 + i * 70, easing: "ease-out", fill: "backwards" });
-        }
-        var px = W - uw * 0.42, py = Math.min(H * 0.6, cy + small * 0.15);
-        var u = place(unicornSVG(), uw, uh);
-        go(u, [{ transform: at(W + uw, py) + "scaleX(-1) rotate(0deg)" }, { transform: at(px, py) + "scaleX(-1) rotate(-10deg)", offset: 0.2 },
-               { transform: at(px, py) + "scaleX(-1) rotate(8deg)", offset: 0.35 }, { transform: at(px, py) + "scaleX(-1) rotate(-6deg)", offset: 0.5 },
-               { transform: at(px, py) + "scaleX(-1) rotate(4deg)", offset: 0.75 }, { transform: at(W + uw, py) + "scaleX(-1) rotate(0deg)" }],
-           { duration: 1600, delay: 250, easing: POP, fill: "backwards" });
-        shake(6, 300);
-      },
-      function kaboom() { // rainbow mushroom cloud, and the unicorn rides the blast into the sky
-        var fl = place("", W, H);
-        fl.classList.add("flash"); fl.style.opacity = 0;
-        go(fl, [{ opacity: 0.7 }, { opacity: 0 }], { duration: 250, easing: "ease-out" });
-        var gy = Math.min(H * 0.85, cy + small * 0.15), ch = Math.min(small * 0.55, (gy - small * 0.04) / 1.15), cw = ch * 200 / 240;
-        var ring = place('<svg viewBox="0 0 200 60" width="100%" height="100%" overflow="visible"><ellipse cx="100" cy="30" rx="96" ry="26" fill="none" stroke="' + INK + '" stroke-width="12"/>' +
-          '<ellipse cx="100" cy="30" rx="96" ry="26" fill="none" stroke="#fff" stroke-width="6"/></svg>', small * 0.9, small * 0.27);
-        go(ring, [{ transform: at(cx, gy) + "scale(0.1)", opacity: 1 }, { transform: at(cx, gy) + "scale(1.5)", opacity: 0 }], { duration: 800, easing: "ease-out" });
-        var c = place(cloudSVG(), cw, ch);
-        c.style.transformOrigin = "50% 100%";
-        go(c, [{ transform: at(cx, gy - ch / 2) + "scale(0.2,0)" }, { transform: at(cx, gy - ch / 2) + "scale(1.08,1.12)", offset: 0.22 },
-               { transform: at(cx, gy - ch / 2) + "scale(0.97,0.95)", offset: 0.32 }, { transform: at(cx, gy - ch / 2) + "scale(1)", offset: 0.42 },
-               { transform: at(cx, gy - ch / 2) + "scale(1.04)", opacity: 1, offset: 0.8 }, { transform: at(cx, gy - ch / 2 - 30) + "scale(1.1)", opacity: 0 }],
-           { duration: 1900, easing: "ease-out" });
-        boom("KABOOM!", cx, gy, small * 0.32, 1000);
-        var d = Math.random() < 0.5 ? -1 : 1, top = gy - ch * 0.9, flip = d > 0 ? "" : " scaleX(-1)";
-        var u = place(unicornSVG(), uw * 0.85, uh * 0.85);
-        go(u, [{ transform: at(cx, top) + "scale(0) rotate(0deg)" + flip }, { transform: at(cx, top - small * 0.05) + "scale(1.2) rotate(" + -15 * d + "deg)" + flip, offset: 0.25 },
-               { transform: at(cx + d * W * 0.25, top - small * 0.22) + "scale(1) rotate(" + -25 * d + "deg)" + flip, offset: 0.55 },
-               { transform: at(cx + d * W * 0.7, -uh) + "scale(0.9) rotate(" + -40 * d + "deg)" + flip }],
-           { duration: 1300, delay: 450, easing: "cubic-bezier(.3,.5,.6,1)", fill: "backwards" });
-        confetti(cx, top + ch * 0.2, 14);
-        shake(14, 550);
-      }
-    ];
-    var n = Math.floor(Math.random() * (scenes.length - 1));
-    if (n >= lastScene && lastScene >= 0) n++;
-    if (n >= scenes.length) n = 0;
-    lastScene = n;
-    scenes[n]();
   }
 
   function fillList(ul, found, live) {
@@ -765,6 +503,53 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     fill.classList.toggle("low", S.left <= 10);
   }
 
+  // The tray area for number tiles. Its height grows on narrow screens so 12 tiles fit
+  // without touching. Spots are picked again whenever the area changes size.
+  function layoutTray() {
+    var t = $("tprobe").offsetWidth || 70, nums = $("nums"), W = nums.clientWidth || 600;
+    var H = Math.round(Math.min(4 * t, Math.max(2.6 * t, 36 * t * t / W)));
+    nums.style.height = H + "px";
+    var a = S.area;
+    if (!S.pos || !a || a.W !== W || a.H !== H || a.t !== t) {
+      S.pos = FX.scatter(S.nums.length, W, H, t);
+      S.area = { W: W, H: H, t: t };
+    }
+  }
+
+  // A correct equation: its tiles do a little action, then fly back to the tray.
+  // Number tiles land in new random spots; signs go back to their places in the row.
+  function sendTilesHome() {
+    var actors = [];
+    Array.prototype.forEach.call($("eqbar").querySelectorAll("[data-ni], [data-oi]"), function (e) {
+      var isNum = e.dataset.ni != null, i = +(isNum ? e.dataset.ni : e.dataset.oi), r = e.getBoundingClientRect();
+      actors.push({ isNum: isNum, i: i, w: r.width, h: r.height, sx: r.left + r.width / 2, sy: r.top + r.height / 2 });
+    });
+    var a = S.area;
+    actors.forEach(function (it) {
+      if (it.isNum) {
+        var p = FX.freeSpot(S.pos, it.i, a.W, a.H, a.t);
+        if (p) S.pos[it.i] = p;
+        S.returning.n[it.i] = true;
+      } else S.returning.o[it.i] = true;
+    });
+    S.lhs = null; S.rhs = null;
+    render();
+    var items = actors.map(function (it) {
+      var target = (it.isNum ? $("nums") : $("ops")).querySelector('[data-i="' + it.i + '"]');
+      var tr = target.getBoundingClientRect();
+      var e = el("div", "ttile actor" + (it.isNum ? "" : " " + FAM[S.ops[it.i]]), it.isNum ? S.nums[it.i] : SYM[S.ops[it.i]]);
+      e.style.width = it.w + "px"; e.style.height = it.h + "px";
+      document.body.appendChild(e);
+      return { el: e, sx: it.sx, sy: it.sy, ex: tr.left + tr.width / 2, ey: tr.top + tr.height / 2, er: it.isNum ? S.pos[it.i].r : 0,
+        done: function () {
+          delete S.returning[it.isNum ? "n" : "o"][it.i];
+          var tile = (it.isNum ? $("nums") : $("ops")).querySelector('[data-i="' + it.i + '"]');
+          if (tile) tile.classList.remove("returning");
+        } };
+    });
+    FX.perform(items);
+  }
+
   function render() {
     var usedN = {}, usedO = {};
     collect(S.lhs, usedN, usedO);
@@ -774,10 +559,13 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
     $("tray").classList.toggle("off", !S.running);
     var nums = $("nums");
     nums.innerHTML = "";
+    layoutTray();
     S.nums.forEach(function (v, i) {
-      var t = el("div", "ttile" + (usedN[i] ? " used" : ""), v);
+      var t = el("div", "ttile" + (usedN[i] ? " used" : "") + (S.returning.n[i] ? " returning" : ""), v);
       t.dataset.kind = "n";
       t.dataset.i = i;
+      var p = S.pos[i];
+      t.style.transform = "translate(" + p.x + "px," + p.y + "px) translate(-50%,-50%) rotate(" + p.r + "deg)";
       nums.appendChild(t);
     });
     var ops = $("ops");
@@ -786,7 +574,7 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
       var g = el("div", "opgroup");
       S.ops.forEach(function (o, i) {
         if (FAM[o] !== fam) return;
-        var t = el("div", "ttile " + fam + (usedO[i] ? " used" : ""), SYM[o]);
+        var t = el("div", "ttile " + fam + (usedO[i] ? " used" : "") + (S.returning.o[i] ? " returning" : ""), SYM[o]);
         t.dataset.kind = "o";
         t.dataset.i = i;
         t.setAttribute("aria-label", NAME[o]);
@@ -815,8 +603,10 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
       ghost.appendChild(pieceEl(hand, null));
     } else {
       var t = srcEl.cloneNode(true);
-      t.style.width = r.width + "px";
-      t.style.height = r.height + "px";
+      t.style.transform = "";
+      t.style.position = "static";
+      t.style.width = srcEl.offsetWidth + "px";
+      t.style.height = srcEl.offsetHeight + "px";
       ghost.appendChild(t);
     }
     document.body.appendChild(ghost);
@@ -861,7 +651,7 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
 
   $("tray").addEventListener("pointerdown", function (e) {
     var t = e.target.closest(".ttile");
-    if (!t || drag || !S.running || t.classList.contains("used")) return;
+    if (!t || drag || !S.running || t.classList.contains("used") || t.classList.contains("returning")) return;
     var i = +t.dataset.i;
     var hand = t.dataset.kind === "n"
       ? { k: "n", i: i, v: S.nums[i] }
@@ -906,6 +696,12 @@ button:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
   } catch (err) {}
   Array.prototype.forEach.call($("maxSeg").children, function (c) { c.setAttribute("aria-pressed", +c.dataset.max === settings.max ? "true" : "false"); });
   Array.prototype.forEach.call($("timeSeg").children, function (c) { c.setAttribute("aria-pressed", +c.dataset.time === settings.time ? "true" : "false"); });
+
+  var resizeTimer = null;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { if (S && !drag) render(); }, 150);
+  });
 
   $("playBtn").addEventListener("click", startRound);
   $("againBtn").addEventListener("click", startRound);
