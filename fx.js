@@ -1,13 +1,24 @@
 // Tile actions for Equation Hunt, shared by the game (index.html) and the viewer (fx.html).
-// The tiles are the only objects. When an equation is correct, its tiles perform a short
-// action and then fly home to the tray. This file also scatters number tiles in the tray.
+// The tiles are the main objects. When an equation is correct, its tiles perform a short
+// action and then fly home to the tray. Anything else that appears (a unicorn's horn, a
+// burst, a rainbow) grows out of a tile or rides with it. This file also scatters the tiles in the tray.
 (function () {
   var style = document.createElement("style");
-  style.textContent = ".actor { position: fixed; left: 0; top: 0; margin: 0; z-index: 50; pointer-events: none; will-change: transform; }";
+  style.textContent =
+    ".actor { position: fixed; left: 0; top: 0; margin: 0; z-index: 50; pointer-events: none; will-change: transform; }" +
+    ".fxextra { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 49; overflow: visible; }" +
+    ".fxrainbow { z-index: -1; }" + // rainbows pass behind the tiles
+    ".spark { border-radius: 25%; box-shadow: 0 2px 3px rgba(30,43,74,0.18); }" +
+    ".deco { position: absolute; inset: 0; pointer-events: none; }" +
+    ".card3d { background: none !important; box-shadow: none !important; transform-style: preserve-3d; }" +
+    ".face { position: absolute !important; left: 0; top: 0; width: 100%; height: 100%; min-width: 0 !important; margin: 0;" +
+    " backface-visibility: hidden; -webkit-backface-visibility: hidden; }" +
+    ".face.back { transform: rotateY(180deg); overflow: hidden; padding: 0; background: #fff; }" +
+    ".face.back svg { display: block; }";
   document.head.appendChild(style);
 
   var RAINBOW = ["#ff4f7b", "#ff9a3c", "#f5c400", "#3dbb6a", "#3fa9f5", "#8e6cf0"];
-  var FX = { keep: false, actions: ["Wave", "Rainbow", "Explosion", "Flip"], RAINBOW: RAINBOW };
+  var FX = { keep: false, actions: ["Wave", "Rainbow colors", "Spin explosion", "Unicorn backs", "Unicorn tile", "Boom", "Rainbow slide"], RAINBOW: RAINBOW };
   var last = -1;
 
   // ---- Scattering number tiles in the tray ----
@@ -69,6 +80,135 @@
     return frames;
   }
 
+  // ---- Pieces that belong to tiles ----
+  // Drawn to match the tiles: rounded, flat colors, the tiles' soft shadow, no dark outlines.
+  var SHADOW = "drop-shadow(0 2px 2px rgba(30,43,74,0.18))";
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function extra(tag, cls) { // a piece placed on the page next to a tile (burst, spark, rainbow)
+    var e = tag === "svg" ? document.createElementNS(SVGNS, "svg") : document.createElement(tag);
+    e.setAttribute("class", "fxextra" + (cls ? " " + cls : ""));
+    document.body.appendChild(e);
+    return e;
+  }
+  function anim(el, frames, duration, delay, removeEl, iterations) {
+    frames.forEach(function (f) { if (!f.easing) f.easing = "linear"; });
+    var a = el.animate(frames, { duration: duration, delay: delay || 0, easing: "linear", iterations: iterations || 1,
+                                 fill: FX.keep ? "both" : "backwards" });
+    if (!FX.keep && removeEl) a.onfinish = function () { removeEl.remove(); };
+    return a;
+  }
+  function at(x, y) { return "translate(" + x + "px," + y + "px) translate(-50%,-50%) "; }
+
+  // Points along a curve, and a six-band rainbow that follows them.
+  function cubicPts(p0, p1, p2, p3, n) {
+    var out = [];
+    for (var i = 0; i <= n; i++) {
+      var t = i / n, a = (1 - t) * (1 - t) * (1 - t), b = 3 * t * (1 - t) * (1 - t), c = 3 * t * t * (1 - t), d = t * t * t;
+      out.push([a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0], a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1]]);
+    }
+    return out;
+  }
+  function normals(pts) { // unit normals, kept on the same side all the way along (starting on the upper side)
+    var ns = [], prev = null;
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[Math.max(0, i - 1)], q = pts[Math.min(pts.length - 1, i + 1)];
+      var tx = q[0] - p[0], ty = q[1] - p[1], L = Math.hypot(tx, ty) || 1, n = [ty / L, -tx / L];
+      if (prev ? n[0] * prev[0] + n[1] * prev[1] < 0 : n[1] > 0) n = [-n[0], -n[1]];
+      ns.push(n); prev = n;
+    }
+    return ns;
+  }
+  function rainbowAlong(pts, bw) {
+    var svg = extra("svg", "fxrainbow"), ns = normals(pts);
+    svg.setAttribute("width", window.innerWidth); svg.setAttribute("height", window.innerHeight);
+    svg.style.filter = SHADOW;
+    var lines = RAINBOW.map(function (c, k) {
+      var off = (2.5 - k) * bw, d = pts.map(function (p, i) { return (p[0] + ns[i][0] * off).toFixed(1) + "," + (p[1] + ns[i][1] * off).toFixed(1); }).join(" ");
+      var pl = document.createElementNS(SVGNS, "polyline");
+      pl.setAttribute("points", d); pl.setAttribute("fill", "none"); pl.setAttribute("stroke", c);
+      pl.setAttribute("stroke-width", bw + 0.8); pl.setAttribute("stroke-linejoin", "round");
+      svg.appendChild(pl);
+      return pl;
+    });
+    return { svg: svg, lines: lines };
+  }
+  function reveal(rb, duration, delay) {
+    rb.lines.forEach(function (pl) {
+      var L = pl.getTotalLength();
+      pl.style.strokeDasharray = L + " " + L;
+      anim(pl, [{ strokeDashoffset: L }, { strokeDashoffset: 0 }], duration, delay);
+    });
+  }
+
+  // Unicorn parts that grow out of a tile (w by h), facing right.
+  function unicornParts(w, h) {
+    var d = document.createElement("div");
+    d.className = "deco";
+    var horn = '<svg viewBox="0 0 30 60" style="position:absolute;left:' + (w * 0.6) + 'px;top:' + (-h * 0.5) + 'px;width:' + (h * 0.3) + 'px;height:' + (h * 0.6) +
+      'px;transform:rotate(22deg);transform-origin:50% 100%;filter:' + SHADOW + '"><path d="M15 0 L29 60 L1 60 Z" fill="#ffd23f"/>' +
+      '<path d="M7 34 L23 28 M5 46 L25 40 M10 20 L20 16" stroke="#f0a400" stroke-width="4" stroke-linecap="round"/></svg>';
+    var ear = '<svg viewBox="0 0 30 34" style="position:absolute;left:' + (w * 0.4) + 'px;top:' + (-h * 0.28) + 'px;width:' + (h * 0.24) + 'px;height:' + (h * 0.3) +
+      'px;filter:' + SHADOW + '"><path d="M15 0 L30 34 L0 34 Z" fill="#fff"/><path d="M15 10 L23 30 L7 30 Z" fill="#ffb3cf"/></svg>';
+    var mane = "";
+    for (var i = 0; i < 5; i++) {
+      var r = h * 0.17;
+      mane += '<div style="position:absolute;width:' + 2 * r + 'px;height:' + 2 * r + 'px;border-radius:50%;background:' + RAINBOW[i] +
+        ';left:' + (w * 0.42 - i * w * 0.13 - r) + 'px;top:' + (-r * 0.75 + i * h * 0.1) + 'px;filter:' + SHADOW + '"></div>';
+    }
+    var tail = '<svg viewBox="0 0 60 50" style="position:absolute;left:' + (-h * 0.66) + 'px;top:' + (h * 0.18) + 'px;width:' + (h * 0.7) + 'px;height:' + (h * 0.6) +
+      'px;filter:' + SHADOW + '">' + [0, 2, 4].map(function (k, j) {
+        return '<path d="M60 ' + (14 + j * 10) + ' C40 ' + (4 + j * 12) + ' 25 ' + (30 + j * 8) + ' 6 ' + (12 + j * 14) + '" stroke="' + RAINBOW[k] +
+          '" stroke-width="9" fill="none" stroke-linecap="round"/>';
+      }).join("") + "</svg>";
+    var eye = '<div style="position:absolute;left:' + (w * 0.74) + 'px;top:' + (h * 0.12) + 'px;width:' + (h * 0.11) + 'px;height:' + (h * 0.14) +
+      'px;border-radius:50%;background:#1E2B4A"></div>';
+    var legs = "";
+    [0.14, 0.32, 0.6, 0.78].forEach(function (x, j) {
+      legs += '<div class="leg" style="position:absolute;left:' + (w * x) + 'px;top:' + (h * 0.93) + 'px;width:' + (h * 0.14) + 'px;height:' + (h * 0.34) +
+        'px;border-radius:' + (h * 0.07) + 'px;background:#fff;box-shadow:0 2px 3px rgba(30,43,74,0.18);transform-origin:50% 0;border-bottom:' + (h * 0.08) + 'px solid #c9b8ff;box-sizing:border-box"></div>';
+    });
+    d.innerHTML = legs + tail + mane + ear + horn + eye;
+    return d;
+  }
+
+  // A cartoon burst drawn like a tile: flat colors, soft shadow.
+  function burstSVG(word) {
+    function star(n, R, r) {
+      var p = [];
+      for (var i = 0; i < n * 2; i++) {
+        var a = Math.PI * i / n - Math.PI / 2, rad = (i % 2 ? r : R) * (1 + (Math.random() - 0.5) * 0.12);
+        p.push((50 + Math.cos(a) * rad).toFixed(1) + "," + (50 + Math.sin(a) * rad).toFixed(1));
+      }
+      return p.join(" ");
+    }
+    return '<svg viewBox="0 0 100 100" width="100%" height="100%" style="overflow:visible;filter:' + SHADOW + '">' +
+      '<polygon points="' + star(12, 50, 34) + '" fill="#ff9a3c"/><polygon points="' + star(12, 40, 28) + '" fill="#ffd23f"/>' +
+      (word ? '<text x="50" y="52" text-anchor="middle" dominant-baseline="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="17" fill="#1E2B4A" transform="rotate(-8 50 50)">' + word + "</text>" : "") +
+      "</svg>";
+  }
+
+  // Pictures painted on the backs of tiles.
+  var BACKS = [
+    // unicorn
+    '<svg viewBox="0 0 100 100" width="100%" height="100%"><rect width="100" height="100" fill="#ffe3ee"/>' +
+      '<path d="M30 55 L52 60 L48 100 L18 100 Z" fill="#fff"/><ellipse cx="46" cy="48" rx="22" ry="19" fill="#fff"/>' +
+      '<ellipse cx="67" cy="58" rx="16" ry="12" fill="#ffd6e7"/><path d="M36 33 L40 15 L49 31 Z" fill="#fff"/>' +
+      '<path d="M52 31 L64 6 L60 34 Z" fill="#ffd23f"/>' +
+      '<circle cx="31" cy="37" r="8" fill="#ff4f7b"/><circle cx="26" cy="49" r="8" fill="#ff9a3c"/><circle cx="23" cy="61" r="8" fill="#f5c400"/>' +
+      '<circle cx="21" cy="73" r="8" fill="#3dbb6a"/><circle cx="20" cy="86" r="8" fill="#3fa9f5"/><circle cx="43" cy="30" r="6" fill="#8e6cf0"/>' +
+      '<circle cx="53" cy="45" r="3.5" fill="#1E2B4A"/><circle cx="57" cy="57" r="4" fill="#ff9cc2"/><circle cx="76" cy="55" r="1.8" fill="#1E2B4A"/>' +
+      '<path d="M64 64 Q70 70 77 64" stroke="#1E2B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>',
+    // rainbow
+    '<svg viewBox="0 0 100 100" width="100%" height="100%"><rect width="100" height="100" fill="#e6f4ff"/>' +
+      RAINBOW.map(function (c, k) { var r = 38 - k * 4.6; return '<path d="M' + (50 - r) + ' 72 A' + r + " " + r + " 0 0 1 " + (50 + r) + ' 72" stroke="' + c + '" stroke-width="4.8" fill="none"/>'; }).join("") +
+      '<g fill="#fff"><circle cx="12" cy="72" r="8"/><circle cx="21" cy="68" r="9"/><circle cx="29" cy="73" r="7"/>' +
+      '<circle cx="71" cy="73" r="7"/><circle cx="79" cy="68" r="9"/><circle cx="88" cy="72" r="8"/></g></svg>',
+    // star
+    '<svg viewBox="0 0 100 100" width="100%" height="100%"><rect width="100" height="100" fill="#8e6cf0"/>' +
+      '<polygon points="50,14 60,38 86,40 66,57 72,83 50,69 28,83 34,57 14,40 40,38" fill="#ffd23f" stroke="#ffd23f" stroke-width="6" stroke-linejoin="round"/>' +
+      '<g fill="#fff"><circle cx="18" cy="18" r="3"/><circle cx="82" cy="20" r="2.5"/><circle cx="84" cy="80" r="3"/><circle cx="16" cy="78" r="2.5"/></g></svg>'
+  ];
+
   var actions = [
     function wave(items) { // tiles hop one after another, then hop home
       items.forEach(function (it, k) {
@@ -118,17 +258,147 @@
         run(it, home(f, 0.42, ox, oy, it, { fromR: spin, spin: spin > 0 ? 720 : -720 }), 1600, 0);
       });
     },
-    function flip(items) { // tiles flip over one by one, then tumble home
+    function unicornBacks(items) { // tiles flip over to show a picture on the back, flip back, and tumble home
       items.forEach(function (it, k) {
-        var h = it.el.offsetHeight || 60, x = it.sx, y = it.sy;
+        var h = it.el.offsetHeight || 60, x = it.sx, y = it.sy, el = it.el;
+        // Turn the tile into a two-sided card: its own face in front, a picture behind.
+        var front = el.cloneNode(true);
+        front.classList.remove("actor");
+        front.classList.add("face");
+        front.removeAttribute("style");
+        var back = document.createElement("div");
+        back.className = "ttile face back";
+        back.innerHTML = BACKS[k % BACKS.length];
+        el.textContent = "";
+        el.classList.add("card3d");
+        el.appendChild(front); el.appendChild(back);
         var f = [
           { offset: 0, transform: T(x, y), easing: UP },
-          { offset: 0.1, transform: T(x, y - h * 0.35, { sx: 1.1, sy: 1.1 }), easing: "ease-in-out" },
-          { offset: 0.42, transform: T(x, y - h * 0.35, { f: 360, sx: 1.1, sy: 1.1 }), easing: POP },
-          { offset: 0.52, transform: T(x, y, { f: 360 }), easing: UP }
+          { offset: 0.08, transform: T(x, y - h * 0.3, { sx: 1.1, sy: 1.1 }), easing: "ease-in-out" },
+          { offset: 0.24, transform: T(x, y - h * 0.3, { f: 180, sx: 1.15, sy: 1.15 }), easing: "ease-in-out" },
+          { offset: 0.32, transform: T(x, y - h * 0.3, { f: 180, r: -8, sx: 1.15, sy: 1.15 }), easing: "ease-in-out" },
+          { offset: 0.4, transform: T(x, y - h * 0.3, { f: 180, r: 8, sx: 1.15, sy: 1.15 }), easing: "ease-in-out" },
+          { offset: 0.46, transform: T(x, y - h * 0.3, { f: 180, sx: 1.15, sy: 1.15 }), easing: "ease-in-out" },
+          { offset: 0.6, transform: T(x, y - h * 0.3, { f: 360, sx: 1.1, sy: 1.1 }), easing: UP }
         ];
-        run(it, home(f, 0.52, x, y, it, { f: 360, spin: 360 }), 1500, k * 120);
+        run(it, home(f, 0.6, x, y - h * 0.3, it, { f: 360, spin: 360 }), 1800, k * 120);
       });
+    },
+    function unicornTile(items) { // the left tile grows into a unicorn and gallops home on a rainbow; the rest follow it
+      var u = items[0], rest = items.slice(1), h = u.el.offsetHeight || 60, w = u.el.offsetWidth || h;
+      var D = 1900, SP = 0.14, END = 0.92, dir = u.ex >= u.sx ? 1 : -1, hops = 4, hopH = h * 0.4;
+      var mx = (u.sx + u.ex) / 2, my = Math.min(u.sy, u.ey) - h * 0.9;
+      function base(t) { var a = (1 - t) * (1 - t), b = 2 * t * (1 - t), c = t * t; return [a * u.sx + b * mx + c * u.ex, a * u.sy + b * my + c * u.ey]; }
+      function bob(t) { return -hopH * Math.abs(Math.sin(Math.PI * hops * t)); }
+      // The unicorn
+      var deco = unicornParts(w, h), flip = dir < 0 ? "scaleX(-1) " : "";
+      u.el.appendChild(deco);
+      anim(deco, [{ offset: 0, transform: flip + "scale(0)" }, { offset: SP * 0.7, transform: flip + "scale(1.15)", easing: POP },
+                  { offset: SP, transform: flip + "scale(1)" }, { offset: END - 0.04, transform: flip + "scale(1)", easing: "ease-in" },
+                  { offset: END + 0.03, transform: flip + "scale(0)" }, { offset: 1, transform: flip + "scale(0)" }], D);
+      Array.prototype.forEach.call(deco.querySelectorAll(".leg"), function (leg, j) {
+        var s = j % 2 ? 1 : -1;
+        anim(leg, [{ transform: "rotate(0deg)" }, { transform: "rotate(" + 28 * s + "deg)" }, { transform: "rotate(0deg)" },
+                   { transform: "rotate(" + -28 * s + "deg)" }, { transform: "rotate(0deg)" }], 300, D * SP, null, Math.ceil(D * (END - SP) / 300));
+      });
+      var f = [{ offset: 0, transform: T(u.sx, u.sy) }, { offset: SP, transform: T(u.sx, u.sy, { sx: 1.08, sy: 0.92 }) }];
+      for (var i = 1; i <= 30; i++) {
+        var t = i / 30, p = base(t), tilt = dir * -10 * Math.cos(2 * Math.PI * hops * t);
+        f.push({ offset: SP + (END - SP) * t, transform: T(p[0], p[1] + bob(t), { r: tilt * (1 - t) + u.er * t }) });
+      }
+      f.push({ offset: END + 0.04, transform: T(u.ex, u.ey, { r: u.er, sx: 1.12, sy: 0.88 }), easing: POP });
+      f.push({ offset: 1, transform: T(u.ex, u.ey, { r: u.er }) });
+      run(u, f, D, 0);
+      // Its rainbow trail, drawn out behind it as it goes
+      var pts = [];
+      for (i = 0; i <= 40; i++) pts.push(base(i / 40));
+      var rb = rainbowAlong(pts, h * 0.1);
+      reveal(rb, D * (END - SP), D * SP);
+      anim(rb.svg, [{ opacity: 1 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], D + 500, 0, rb.svg);
+      // The other tiles jump onto its path and follow in a line, then hop off to their own spots
+      var plen = 0;
+      for (i = 1; i < pts.length; i++) plen += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      var lag = Math.min(Math.max(0.12, h * 1.7 / plen), 0.7 / Math.max(1, rest.length)), Df = D + 500, sc = D / Df; // leave room for the unicorn's tail
+      rest.forEach(function (it, j) {
+        var k = j + 1, join = SP + k * lag * (END - SP), start = Math.max(SP * 0.5, join - 0.16), p0 = base(0);
+        var g = [{ offset: 0, transform: T(it.sx, it.sy) }, { offset: start * sc, transform: T(it.sx, it.sy), easing: UP },
+                 { offset: (start + join) / 2 * sc, transform: T((it.sx + p0[0]) / 2, Math.min(it.sy, p0[1]) - h * 0.9), easing: DOWN },
+                 { offset: join * sc, transform: T(p0[0], p0[1]) }];
+        for (var s = 1; s <= 24; s++) {
+          var tf = (1 - k * lag) * s / 24, q = base(tf);
+          g.push({ offset: (join + (END - join) * s / 24) * sc, transform: T(q[0], q[1] + bob(tf), { r: it.er * tf * 0.5 }) });
+        }
+        var last = base(1 - k * lag);
+        run(it, home(g, END * sc, last[0], last[1], it, { fromR: it.er * (1 - k * lag) * 0.5 }), Df, 0);
+      });
+    },
+    function boom(items) { // a burst goes off behind each tile and the tile shoots out of it, then lands home
+      var mid = items[Math.floor(items.length / 2)], small = Math.min(window.innerWidth, window.innerHeight), D = 1700, B = 0.16;
+      items.forEach(function (it) {
+        var h = it.el.offsetHeight || 60, size = h * (it === mid ? 2.6 : 2);
+        var b = extra("div");
+        b.style.width = b.style.height = size + "px";
+        b.innerHTML = burstSVG(it === mid ? "BOOM!" : "");
+        b.style.zIndex = it === mid ? 49 : 48; // the BOOM! word stays on top
+        anim(b, [{ offset: 0, transform: at(it.sx, it.sy) + "scale(0) rotate(0deg)", opacity: 1 },
+                 { offset: B, transform: at(it.sx, it.sy) + "scale(0) rotate(0deg)", opacity: 1, easing: POP },
+                 { offset: B + 0.08, transform: at(it.sx, it.sy) + "scale(1.15) rotate(12deg)", opacity: 1 },
+                 { offset: B + 0.18, transform: at(it.sx, it.sy) + "scale(1) rotate(6deg)", opacity: 1 },
+                 { offset: 0.58, transform: at(it.sx, it.sy) + "scale(1.04) rotate(4deg)", opacity: 1, easing: "ease-in" },
+                 { offset: 0.72, transform: at(it.sx, it.sy) + "scale(0.5) rotate(0deg)", opacity: 0 },
+                 { offset: 1, transform: at(it.sx, it.sy) + "scale(0.5) rotate(0deg)", opacity: 0 }], D, 0, b);
+        for (var s = 0; s < 6; s++) { // sparks fly off the tile's edges
+          var sp = extra("div", "spark"), a = Math.PI * 2 * s / 6 + Math.random() * 0.5, sz = h * 0.16;
+          sp.style.width = sp.style.height = sz + "px";
+          sp.style.background = RAINBOW[s];
+          var x1 = it.sx + Math.cos(a) * h * 0.5, y1 = it.sy + Math.sin(a) * h * 0.5, x2 = it.sx + Math.cos(a) * h * 1.6, y2 = it.sy + Math.sin(a) * h * 1.6;
+          anim(sp, [{ offset: 0, transform: at(x1, y1) + "scale(0) rotate(0deg)" }, { offset: B, transform: at(x1, y1) + "scale(0) rotate(0deg)", easing: UP },
+                    { offset: B + 0.22, transform: at(x2, y2) + "scale(1) rotate(180deg)", easing: "ease-in" },
+                    { offset: B + 0.36, transform: at(x2, y2 + h * 0.4) + "scale(0) rotate(270deg)" },
+                    { offset: 1, transform: at(x2, y2 + h * 0.4) + "scale(0) rotate(270deg)" }], D, 0, sp);
+        }
+        var dx = it.sx - mid.sx + (Math.random() - 0.5) * 30, dy = -h * 0.8, len = Math.hypot(dx, dy) || 1, d = small * (0.14 + Math.random() * 0.06);
+        var ox = it.sx + dx / len * d, oy = Math.max(h * 0.7, it.sy + dy / len * d), spin = (dx >= 0 ? 1 : -1) * (360 + Math.random() * 180);
+        var f = [{ offset: 0, transform: T(it.sx, it.sy) }];
+        for (var j = 1; j <= 5; j++) f.push({ offset: B * j / 6, transform: T(it.sx + (j % 2 ? 3 : -3), it.sy + (j % 3 ? -2 : 2), { r: j % 2 ? 3 : -3 }) });
+        f.push({ offset: B, transform: T(it.sx, it.sy, { sx: 1.2, sy: 0.8 }), easing: "cubic-bezier(.1,.9,.3,1)" });
+        f.push({ offset: 0.5, transform: T(ox, oy, { r: spin }), easing: UP });
+        run(it, home(f, 0.5, ox, oy, it, { fromR: spin, spin: spin > 0 ? 360 : -360 }), D, 0);
+      });
+    },
+    function rainbowSlide(items) { // a rainbow grows out from under the equation and the tiles slide down it to the tray
+      var h = items[0].el.offsetHeight || 60, W = window.innerWidth;
+      var left = items[0], right = items[items.length - 1], gy = 0, ty = Infinity;
+      items.forEach(function (it) { gy += it.sy / items.length; ty = Math.min(ty, it.ey); });
+      var d = (W - right.sx) >= left.sx ? 1 : -1, end = d > 0 ? right : left;
+      var S = [end.sx, gy + h * 0.62];
+      var E = [Math.max(h, Math.min(W - h, S[0] + d * Math.max(h * 2.5, W * 0.16))), ty - h * 0.2];
+      var pts = cubicPts(S, [S[0] + d * h * 1.6, S[1] - h * 1.4], [E[0] + d * h * 0.6, E[1] - h * 2.2], E, 44);
+      var bw = h * 0.12, rb = rainbowAlong(pts, bw), ns = normals(pts), lift = h * 0.5 + bw * 3;
+      reveal(rb, 420, 0);
+      var order = items.slice().sort(function (a, b) { return d * (b.sx - a.sx); });
+      var lastEnd = 0;
+      order.forEach(function (it, k) {
+        var t0 = 380 + k * 170, HOP = 280, SL = 650, HOME = 460, Dk = t0 + HOP + SL + HOME;
+        var on = function (i) { return [pts[i][0] + ns[i][0] * lift, pts[i][1] + ns[i][1] * lift]; };
+        var tilt = function (i) {
+          var p = pts[Math.max(0, i - 1)], q = pts[Math.min(pts.length - 1, i + 1)], a = Math.atan2(q[1] - p[1], q[0] - p[0]) * 180 / Math.PI;
+          if (a > 90) a -= 180; if (a < -90) a += 180;
+          return a * 0.6;
+        };
+        var p0 = on(0);
+        var f = [{ offset: 0, transform: T(it.sx, it.sy) }, { offset: t0 / Dk, transform: T(it.sx, it.sy), easing: UP },
+                 { offset: (t0 + HOP / 2) / Dk, transform: T((it.sx + p0[0]) / 2, Math.min(it.sy, p0[1]) - h * 0.8), easing: DOWN },
+                 { offset: (t0 + HOP) / Dk, transform: T(p0[0], p0[1], { r: tilt(0) }), easing: "linear" }];
+        for (var s = 1; s <= 16; s++) {
+          var u = Math.pow(s / 16, 1.6), i = Math.round(u * (pts.length - 1)), q = on(i);
+          f.push({ offset: (t0 + HOP + SL * s / 16) / Dk, transform: T(q[0], q[1], { r: tilt(i) }) });
+        }
+        var qe = on(pts.length - 1);
+        run(it, home(f, (t0 + HOP + SL) / Dk, qe[0], qe[1], it, { fromR: tilt(pts.length - 1) }), Dk, 0);
+        lastEnd = Math.max(lastEnd, t0 + HOP + SL);
+      });
+      anim(rb.svg, [{ opacity: 1 }, { opacity: 1, offset: lastEnd / (lastEnd + 350) }, { opacity: 0 }], lastEnd + 350, 0, rb.svg);
     }
   ];
 

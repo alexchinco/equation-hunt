@@ -145,7 +145,7 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 24px; margin: 0 a
 
   function clear() {
     document.getAnimations().forEach(function (a) { a.cancel(); });
-    Array.prototype.forEach.call(document.querySelectorAll(".actor"), function (n) { n.remove(); });
+    Array.prototype.forEach.call(document.querySelectorAll(".actor, .fxextra"), function (n) { n.remove(); });
     Array.prototype.forEach.call(document.querySelectorAll(".hide"), function (n) { n.classList.remove("hide"); });
   }
 
