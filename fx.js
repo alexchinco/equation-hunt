@@ -402,6 +402,17 @@
     }
   ];
 
+  // The rumble: the whole screen gives a quick shake (bigger, and timed with the blasts, for Boom).
+  var boomAction = actions[5];
+  function rumble(delay, px) {
+    var page = document.getElementById("app") || document.getElementById("page");
+    if (!page) return;
+    page.animate([{ transform: "translate(0,0)" }, { transform: "translate(" + -px + "px," + px * 0.6 + "px) rotate(-0.5deg)" },
+      { transform: "translate(" + px * 0.8 + "px," + -px * 0.7 + "px) rotate(0.5deg)" }, { transform: "translate(" + -px * 0.5 + "px," + px * 0.4 + "px)" },
+      { transform: "translate(" + px * 0.3 + "px," + -px * 0.2 + "px)" }, { transform: "translate(0,0)" }],
+      { duration: 420, delay: delay, easing: "ease-out" });
+  }
+
   // items: [{ el, sx, sy, ex, ey, er, done }]. el is a tile already in the page with class "actor";
   // (sx, sy) is where its center starts, (ex, ey) where it lands in the tray, er its tilt there.
   FX.perform = function (items, force) {
@@ -413,6 +424,7 @@
     if (typeof force === "number") n = force;
     last = n;
     actions[n](items);
+    rumble(actions[n] === boomAction ? 270 : 0, actions[n] === boomAction ? 12 : 8);
   };
 
   window.FX = FX;
