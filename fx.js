@@ -23,7 +23,7 @@
 
   var RAINBOW = ["#ff4f7b", "#ff9a3c", "#f5c400", "#3dbb6a", "#3fa9f5", "#8e6cf0"];
   var FX = { keep: false, actions: ["Wave", "Rainbow colors", "Spin explosion", "Unicorn backs", "Unicorn tile", "Boom", "Rainbow slide",
-    "Rainbow melt", "Unicorn egg", "Rocket tower", "Balloon", "Googly stampede", "Rainbow sneeze"], RAINBOW: RAINBOW };
+    "Rainbow melt", "Unicorn egg", "Rocket tower", "Balloon", "Googly stampede", "Rainbow sneeze", "Rainbow poop"], RAINBOW: RAINBOW };
   var last = -1;
 
   // ---- Scattering number tiles in the tray ----
@@ -161,7 +161,7 @@
       mane += '<div style="position:absolute;width:' + 2 * r + 'px;height:' + 2 * r + 'px;border-radius:50%;background:' + RAINBOW[i] +
         ';left:' + (w * 0.42 - i * w * 0.13 - r) + 'px;top:' + (-r * 0.75 + i * h * 0.1) + 'px;filter:' + SHADOW + '"></div>';
     }
-    var tail = '<svg viewBox="0 0 60 50" style="position:absolute;left:' + (-h * 0.66) + 'px;top:' + (h * 0.18) + 'px;width:' + (h * 0.7) + 'px;height:' + (h * 0.6) +
+    var tail = '<svg class="tail" viewBox="0 0 60 50" style="position:absolute;left:' + (-h * 0.66) + 'px;top:' + (h * 0.18) + 'px;width:' + (h * 0.7) + 'px;height:' + (h * 0.6) +
       'px;filter:' + SHADOW + '">' + [0, 2, 4].map(function (k, j) {
         return '<path d="M60 ' + (14 + j * 10) + ' C40 ' + (4 + j * 12) + ' 25 ' + (30 + j * 8) + ' 6 ' + (12 + j * 14) + '" stroke="' + RAINBOW[k] +
           '" stroke-width="9" fill="none" stroke-linecap="round"/>';
@@ -673,6 +673,91 @@
         run(it, g, D, 0);
       });
       return { delay: D * CHOO, px: 12 };
+    },
+    function rainbowPoop(items) { // the left tile turns into a unicorn and poops a rainbow swirl; the others bounce on it, then it gets kicked
+      var u = items[0], rest = items.slice(1), h = u.el.offsetHeight || 60, w = u.el.offsetWidth || h, W = window.innerWidth;
+      var D = 4000, Du = D + 500, sc = D / Du, PLOP = 0.48, KICK = 0.9;
+      var ux = Math.min(W - h * 3, u.sx + h * 2), uy = u.sy - h * 0.27, floorY = u.sy + h * 0.5, P = h * 1.05;
+      var pxc = ux - w * 0.5 - P * 0.62, pyc = floorY - P / 2;
+      function o(x) { return x * sc; }
+      // The unicorn
+      var deco = unicornParts(w, h), tail = deco.querySelector(".tail");
+      u.el.appendChild(deco);
+      anim(deco, [{ offset: 0, transform: "scale(0,0)" }, { offset: o(0.04), transform: "scale(1.15,1.15)", easing: POP }, { offset: o(0.06), transform: "scale(1,1)" },
+                  { offset: o(0.56), transform: "scale(1,1)", easing: "ease-in-out" }, { offset: o(0.59), transform: "scale(-1,1)" },
+                  { offset: o(0.66), transform: "scale(-1,1)", easing: "ease-in-out" }, { offset: o(0.69), transform: "scale(1,1)" },
+                  { offset: o(0.92), transform: "scale(1,1)", easing: "ease-in" }, { offset: o(0.97), transform: "scale(0,0)" }, { offset: 1, transform: "scale(0,0)" }], Du);
+      tail.style.transformOrigin = "100% 40%";
+      anim(tail, [{ offset: 0, transform: "rotate(0deg)" }, { offset: 0.2, transform: "rotate(0deg)", easing: UP }, { offset: 0.24, transform: "rotate(60deg)" },
+                  { offset: 0.45, transform: "rotate(60deg)", easing: "ease-in-out" }, { offset: 0.5, transform: "rotate(0deg)" }, { offset: 1, transform: "rotate(0deg)" }], D);
+      Array.prototype.forEach.call(deco.querySelectorAll(".leg"), function (leg, j) {
+        var s = j % 2 ? 1 : -1;
+        anim(leg, [{ transform: "rotate(0deg)" }, { transform: "rotate(" + 28 * s + "deg)" }, { transform: "rotate(0deg)" },
+                   { transform: "rotate(" + -28 * s + "deg)" }, { transform: "rotate(0deg)" }], 240, D * 0.06, null, 2);
+      });
+      var f = [{ offset: 0, transform: T(u.sx, u.sy) }, { offset: o(0.06), transform: T(u.sx, u.sy - h * 0.1, { sx: 1.08, sy: 0.92 }) }];
+      for (var i = 1; i <= 8; i++) {
+        var t = i / 8;
+        f.push({ offset: o(0.06 + 0.12 * t), transform: T(u.sx + (ux - u.sx) * t, u.sy + (uy - u.sy) * t - h * 0.25 * Math.abs(Math.sin(Math.PI * 2 * t)), { r: -8 * Math.cos(Math.PI * 4 * t) * (1 - t) }) });
+      }
+      [[0.2, 0, 1, 1, 0, "ease-in-out"], [0.24, 0.1, 1.06, 0.9, 0], [0.27, 0.14, 1.1, 0.84, -4], [0.3, 0.1, 1.04, 0.92, 0], [0.34, 0.15, 1.12, 0.82, 4],
+       [0.37, 0.1, 1.04, 0.92, 0], [0.41, 0.16, 1.14, 0.8, -5], [0.44, 0.1, 1.06, 0.9, 0, UP], [0.48, -0.4, 0.95, 1.08, 0, DOWN], [0.52, 0, 1.08, 0.92, 0, POP],
+       [0.55, 0, 1, 1, 0], [0.6, 0, 1, 1, -6], [0.65, 0, 1, 1, 6], [0.7, 0, 1, 1, 0], [0.86, 0, 1, 1, 0, "ease-in"], [0.89, -0.08, 1, 1, 24, UP], [0.92, 0, 1, 1, 0]
+      ].forEach(function (k) { f.push({ offset: o(k[0]), transform: T(ux, uy + h * k[1], { sx: k[2], sy: k[3], r: k[4] }), easing: k[5] }); });
+      run(u, home(f, o(0.92), ux, uy, u), Du, 0);
+      // The rainbow swirl, squeezed out from behind the tile
+      var poop = extra("div");
+      poop.style.width = poop.style.height = P + "px";
+      poop.style.transformOrigin = "60% 100%";
+      poop.innerHTML = '<svg viewBox="0 0 100 100" width="100%" height="100%" style="overflow:visible;filter:' + SHADOW + '">' +
+        [[86, 46, 13], [72, 39, 12], [59, 31, 11], [47, 23, 10], [36, 15, 9]].map(function (c, k) {
+          return '<ellipse cx="50" cy="' + c[0] + '" rx="' + c[1] + '" ry="' + c[2] + '" fill="' + RAINBOW[k] + '"/>' +
+            '<ellipse cx="' + (50 - c[1] * 0.5) + '" cy="' + (c[0] - c[2] * 0.35) + '" rx="' + c[1] * 0.22 + '" ry="' + c[2] * 0.28 + '" fill="#fff" opacity="0.45"/>';
+        }).join("") +
+        '<path d="M40 36 C40 22 52 16 62 4 C64 16 62 28 60 36 Z" fill="' + RAINBOW[5] + '"/>' +
+        '<ellipse cx="41" cy="70" rx="3.2" ry="4.2" fill="#1E2B4A"/><ellipse cx="59" cy="70" rx="3.2" ry="4.2" fill="#1E2B4A"/>' +
+        '<path d="M43 77 Q50 83 57 77" stroke="#1E2B4A" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>';
+      var gap = Math.min(0.045, 0.15 / Math.max(1, rest.length)), first = 0.69;
+      function ps(sx, sy, dy, op, easing) { return { transform: at(pxc, pyc + h * (dy || 0)) + "scale(" + sx + "," + sy + ")", opacity: op == null ? 1 : op, easing: easing }; }
+      var pf = [[0, ps(0, 0)], [0.24, ps(0, 0, 0, 1, POP)], [0.28, ps(0.5, 0.35)], [0.31, ps(0.55, 0.4, 0, 1, POP)], [0.35, ps(0.8, 0.65)],
+                [0.38, ps(0.82, 0.68, 0, 1, POP)], [0.42, ps(1, 1, 0, 1, UP)], [0.45, ps(0.92, 1.1, -0.2, 1, DOWN)], [PLOP, ps(1.18, 0.82, 0, 1, POP)],
+                [0.52, ps(1, 1)], [first - 0.02, ps(1, 1)]];
+      rest.forEach(function (it, j) { var l = first + j * gap; pf.push([l, ps(1.25, 0.7, 0, 1, POP)]); pf.push([l + gap * 0.8, ps(1, 1)]); });
+      pf.push([0.885, ps(1, 1, 0, 1, "ease-in")], [KICK, ps(1.4, 0.35)], [0.92, ps(1.6, 0.1, 0, 0)], [1, ps(1.6, 0.1, 0, 0)]);
+      anim(poop, pf.map(function (p) { p[1].offset = p[0]; return p[1]; }), D, 0, poop);
+      // Stink lines, in rainbow colors
+      [3, 4, 5].forEach(function (c, k) {
+        var s = extra("svg"), x = pxc + (k - 1) * h * 0.32, y = floorY - P - h * 0.3, d = k * 0.03;
+        s.setAttribute("viewBox", "0 0 20 60"); s.style.width = h * 0.2 + "px"; s.style.height = h * 0.6 + "px"; s.style.filter = SHADOW;
+        s.innerHTML = '<path d="M10 57 C2 47 18 39 10 29 C2 19 18 11 10 3" stroke="' + RAINBOW[c] + '" stroke-width="5" fill="none" stroke-linecap="round"/>';
+        anim(s, [{ offset: 0, transform: at(x, y) + "scale(0.6)", opacity: 0 }, { offset: 0.5 + d, transform: at(x, y) + "scale(0.6)", opacity: 0 },
+                 { offset: 0.56 + d, transform: at(x, y - h * 0.15) + "scale(1)", opacity: 1 }, { offset: 0.74 + d, transform: at(x + h * 0.1, y - h * 0.5) + "scale(1)", opacity: 1 },
+                 { offset: 0.82 + d, transform: at(x, y - h * 0.75) + "scale(0.8)", opacity: 0 }, { offset: 1, transform: at(x, y - h * 0.75) + "scale(0.8)", opacity: 0 }], D, 0, s);
+      });
+      // The kick: the swirl splats into rainbow drops
+      for (i = 0; i < 10; i++) {
+        var a = Math.PI * (-0.92 + 0.84 * i / 9), dist = h * (1.2 + Math.random() * 0.9), dr = extra("div"), sx0 = pxc, sy0 = floorY - P * 0.3;
+        dr.style.width = dr.style.height = h * 0.2 + "px"; dr.style.borderRadius = "50%"; dr.style.background = RAINBOW[i % 6]; dr.style.boxShadow = "0 2px 3px rgba(30,43,74,0.18)";
+        anim(dr, [{ offset: 0, transform: at(sx0, sy0) + "scale(0)", opacity: 1 }, { offset: KICK, transform: at(sx0, sy0) + "scale(0)", opacity: 1, easing: UP },
+                  { offset: 0.95, transform: at(sx0 + Math.cos(a) * dist * 0.7, sy0 + Math.sin(a) * dist * 0.7) + "scale(1.1)", opacity: 1, easing: DOWN },
+                  { offset: 1, transform: at(sx0 + Math.cos(a) * dist, sy0 + Math.sin(a) * dist * 0.6 + h * 0.6) + "scale(0.5)", opacity: 0 }], D, 0, dr);
+      }
+      // The others: step aside, lean away in disgust, then bounce off the swirl like a trampoline and home
+      var start = ux + w * 0.5 + h * 1.0, step = Math.min(h * 1.25, (W - h * 0.7 - start) / Math.max(1, rest.length - 1));
+      var topY = floorY - P - h * 0.45;
+      rest.forEach(function (it, j) {
+        var rx = start + j * step, ry = it.sy, l = first + j * gap, s0 = l - 0.07;
+        var g = [{ offset: 0, transform: T(it.sx, it.sy) }, { offset: 0.03 + j * 0.01, transform: T(it.sx, it.sy), easing: UP },
+                 { offset: 0.09 + j * 0.01, transform: T((it.sx + rx) / 2, Math.min(it.sy, ry) - h * 0.8), easing: DOWN },
+                 { offset: 0.15 + j * 0.01, transform: T(rx, ry, { sx: 1.1, sy: 0.9 }), easing: POP }, { offset: 0.2 + j * 0.01, transform: T(rx, ry) },
+                 { offset: 0.5, transform: T(rx, ry), easing: "ease-out" }, { offset: 0.54, transform: T(rx + h * 0.15, ry, { r: 18 }), easing: "ease-in-out" },
+                 { offset: 0.57, transform: T(rx + h * 0.15, ry, { r: 10 }), easing: "ease-in-out" }, { offset: 0.6, transform: T(rx + h * 0.15, ry, { r: 18 }) },
+                 { offset: s0, transform: T(rx + h * 0.15, ry, { r: 18 }), easing: UP },
+                 { offset: (s0 + l) / 2, transform: T((rx + pxc) / 2, Math.min(ry, topY) - h * 2, { r: -170 }), easing: DOWN },
+                 { offset: l, transform: T(pxc, topY + h * 0.12, { r: -360, sx: 1.12, sy: 0.85 }), easing: UP }];
+        run(it, home(g, l, pxc, topY, it, { fromR: -360, spin: -360 }), D, 0);
+      });
+      return { delay: D * PLOP, px: 10 };
     }
   ];
 
